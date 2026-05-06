@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.vite/
+*.log
+*.local
+tsconfig.tsbuildinfo
+
+out/*
+!out/.gitkeep
