@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { createSampleAppStorage } from "./lib/sampleData";
 import {
@@ -21,6 +21,11 @@ import type {
   ViewName,
 } from "./types";
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
 function findMomijiSource(data: AppStorage): BankRateSource {
   return data.bankSources.find((source) => source.id === "momiji") ?? data.bankSources[0];
 }
@@ -38,6 +43,40 @@ export default function App() {
   const [activeView, setActiveView] = useState<ViewName>(() =>
     getDefaultView(Boolean(initialStorage)),
   );
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    const displayModeQuery = window.matchMedia("(display-mode: standalone)");
+    const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+    const updateInstalledState = () => {
+      setIsInstalled(
+        displayModeQuery.matches ||
+          ("standalone" in navigatorWithStandalone && Boolean(navigatorWithStandalone.standalone)),
+      );
+    };
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+
+    const handleInstalled = () => {
+      setInstallPrompt(null);
+      setIsInstalled(true);
+    };
+
+    updateInstalledState();
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+    displayModeQuery.addEventListener("change", updateInstalledState);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+      displayModeQuery.removeEventListener("change", updateInstalledState);
+    };
+  }, []);
 
   const selectedScenario = useMemo(
     () =>
@@ -114,6 +153,15 @@ export default function App() {
   const saveRefinanceCandidate = () => {
     window.alert("この候補を保存しました。v1では現在の端末内データとして保持します。");
     persist({ ...appData }, true);
+  };
+
+  const installApp = async () => {
+    if (!installPrompt) {
+      return;
+    }
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
   };
 
   const renderView = () => {
@@ -194,7 +242,13 @@ export default function App() {
   };
 
   return (
-    <AppShell activeView={activeView} onNavigate={navigate} isConfigured={isConfigured}>
+    <AppShell
+      activeView={activeView}
+      onNavigate={navigate}
+      isConfigured={isConfigured}
+      canInstall={Boolean(installPrompt) && !isInstalled}
+      onInstall={installApp}
+    >
       {renderView()}
     </AppShell>
   );

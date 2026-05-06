@@ -1,12 +1,15 @@
-import { BarChart3, Calculator, Home, Settings } from "lucide-react";
+import { BarChart3, Calculator, Download, Home, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ViewName } from "../types";
+import { Button } from "./Button";
 
 type AppShellProps = {
   children: ReactNode;
   activeView: ViewName;
   onNavigate: (view: ViewName) => void;
   isConfigured: boolean;
+  canInstall?: boolean;
+  onInstall?: () => void;
 };
 
 const navItems: Array<{ view: ViewName; label: string; icon: typeof Home }> = [
@@ -16,11 +19,34 @@ const navItems: Array<{ view: ViewName; label: string; icon: typeof Home }> = [
   { view: "settings", label: "設定", icon: Settings },
 ];
 
-export function AppShell({ children, activeView, onNavigate, isConfigured }: AppShellProps) {
+export function AppShell({
+  children,
+  activeView,
+  onNavigate,
+  isConfigured,
+  canInstall = false,
+  onInstall,
+}: AppShellProps) {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
       <div className="mx-auto min-h-screen max-w-[430px] bg-slate-50 shadow-2xl">
-        <main className="min-h-screen px-4 pb-28 pt-5">{children}</main>
+        <main className="min-h-screen px-4 pb-28 pt-5">
+          {canInstall ? (
+            <div className="mb-4 rounded-lg border border-navy-100 bg-white p-3 shadow-soft">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-navy-700">PWA対応</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">アプリとして利用できます</p>
+                </div>
+                <Button className="min-h-10 px-3 py-2 text-xs" onClick={onInstall}>
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  インストール
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          {children}
+        </main>
 
         <footer className="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-[430px] border-t border-slate-200 bg-white/95 px-3 pb-3 pt-2 backdrop-blur">
           <p className="mb-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-4 text-slate-500">

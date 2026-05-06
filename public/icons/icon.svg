@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="住宅ローン金利チェッカー">
+  <rect width="512" height="512" rx="112" fill="#0f438b"/>
+  <path d="M132 260 256 150l124 110" fill="none" stroke="#fff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M168 252v124h176V252" fill="none" stroke="#fff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M206 330h100" fill="none" stroke="#d9e9ff" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="356" cy="154" r="48" fill="#d9e9ff"/>
+  <path d="M336 154h40M356 134v40" stroke="#0f438b" stroke-width="18" stroke-linecap="round"/>
+</svg>
