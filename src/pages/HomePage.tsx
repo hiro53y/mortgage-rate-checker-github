@@ -1,8 +1,8 @@
-import { BarChart3, Calculator, ExternalLink, Pencil } from "lucide-react";
+import { BarChart3, Calculator, Eye, EyeOff, ExternalLink, Pencil } from "lucide-react";
+import { useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { InfoRow } from "../components/InfoRow";
-import { MoneyDisplay } from "../components/MoneyDisplay";
 import { RateBadge } from "../components/RateBadge";
 import { SectionTitle } from "../components/SectionTitle";
 import {
@@ -34,6 +34,9 @@ export function HomePage({
   onEdit,
 }: HomePageProps) {
   const rateDifference = calculateRateDifference(loan.currentRate, MOMIJI_LOWER_RATE);
+  const [showMoney, setShowMoney] = useState(false);
+  const maskedMoney = "*****";
+  const moneyText = (value: number) => (showMoney ? formatMoney(value) : maskedMoney);
 
   return (
     <div className="space-y-4">
@@ -59,6 +62,20 @@ export function HomePage({
           </Button>
         </div>
 
+        <Button
+          variant="secondary"
+          fullWidth
+          className="min-h-10 py-2 text-xs"
+          onClick={() => setShowMoney((current) => !current)}
+        >
+          {showMoney ? (
+            <EyeOff className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <Eye className="h-4 w-4" aria-hidden="true" />
+          )}
+          {showMoney ? "金額を隠す" : "金額を表示する"}
+        </Button>
+
         <div className="rounded-lg bg-navy-50 p-4">
           <p className="text-xs font-bold text-navy-700">現在適用金利</p>
           <p className="mt-1 text-4xl font-black tracking-normal text-navy-800">
@@ -75,14 +92,25 @@ export function HomePage({
         <dl>
           <InfoRow label="返済方式" value={loan.repaymentType} />
           <InfoRow label="団信" value={loan.cancerInsuranceType} />
-          <InfoRow label="現在残高" value={formatMoney(loan.currentBalance)} emphasis />
+          <InfoRow label="現在残高" value={moneyText(loan.currentBalance)} emphasis />
           <InfoRow label="ボーナス返済月" value={formatBonusMonths(loan.bonusMonths)} />
         </dl>
       </Card>
 
       <div className="grid grid-cols-1 gap-3">
-        <MoneyDisplay label="毎月返済額" value={loan.monthlyPayment} />
-        <MoneyDisplay label="ボーナス返済額" value={loan.bonusPayment} helper="6月・12月" />
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 shadow-soft">
+          <p className="text-xs font-semibold text-slate-500">毎月返済額</p>
+          <p className="mt-1 text-2xl font-black tracking-normal text-slate-950">
+            {moneyText(loan.monthlyPayment)}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 shadow-soft">
+          <p className="text-xs font-semibold text-slate-500">ボーナス返済額</p>
+          <p className="mt-1 text-2xl font-black tracking-normal text-slate-950">
+            {moneyText(loan.bonusPayment)}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">6月・12月</p>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -115,11 +143,11 @@ export function HomePage({
         <dl>
           <InfoRow label="商品名" value={loan.productName} />
           <InfoRow label="支店名" value={loan.branchName} />
-          <InfoRow label="当初お借入金額" value={formatMoney(loan.principal)} emphasis />
+          <InfoRow label="当初お借入金額" value={moneyText(loan.principal)} emphasis />
           <InfoRow label="お借入日" value={formatDateJa(loan.startDate)} />
           <InfoRow label="最終返済日" value={formatDateJa(loan.endDate)} />
           <InfoRow label="次回返済日" value={formatDateJa(loan.nextPaymentDate)} />
-          <InfoRow label="次回返済予定額" value={formatMoney(loan.nextPaymentAmount)} />
+          <InfoRow label="次回返済予定額" value={moneyText(loan.nextPaymentAmount)} />
         </dl>
       </Card>
     </div>
