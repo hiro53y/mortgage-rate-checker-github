@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "./components/AppShell";
+import {
+  buildRefinanceResultFromComparisonRow,
+  isBaseComparisonRow,
+  recalculateComparisonRow,
+  recalculateComparisonRows,
+} from "./lib/comparisonMath";
+import { fetchLatestRates, getCurrentMonthKey, isMonthlyAutoFetchDue } from "./lib/rateFetch";
 import { createSampleAppStorage } from "./lib/sampleData";
 import {
   clearAppStorage,
@@ -45,6 +52,7 @@ export default function App() {
   );
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [isFetchingRates, setIsFetchingRates] = useState(false);
 
   useEffect(() => {
     const displayModeQuery = window.matchMedia("(display-mode: standalone)");
@@ -102,11 +110,21 @@ export default function App() {
     setActiveView(view);
   };
 
-  const openBank = (source: BankRateSource) => {
+  const openBank = (source: BankRateSource, rowId?: string) => {
     window.open(source.rateUrl, "_blank", "noopener,noreferrer");
+    const now = new Date().toISOString();
+    const nextRows = rowId
+      ? appData.comparisonRows.map((row) =>
+          row.id === rowId ? { ...row, officialCheckedAt: now } : row,
+        )
+      : appData.comparisonRows;
     if (source.id === "momiji") {
-      const nextData = { ...appData, lastCheckedAt: new Date().toISOString() };
+      const nextData = { ...appData, comparisonRows: nextRows, lastCheckedAt: now };
       persist(nextData, isConfigured);
+      return;
+    }
+    if (rowId) {
+      persist({ ...appData, comparisonRows: nextRows }, isConfigured);
     }
   };
 
@@ -155,6 +173,162 @@ export default function App() {
     persist({ ...appData }, true);
   };
 
+  const applyFetchedRates = useCallback(
+    (responseRows: AppStorage["comparisonRows"], response: Awaited<ReturnType<typeof fetchLatestRates>>) => {
+      const fetchedRows = responseRows.map((row): BankComparisonRow => {
+        if (isBaseComparisonRow(row)) {
+          return row;
+        }
+        const source = appData.bankSources.find((bankSource) =>
+          row.bankName.includes(bankSource.bankName),
+        );
+        const item = response.items.find((rateItem) => rateItem.bankRateSourceId === source?.id);
+        if (!item) {
+          return row;
+        }
+        if (item.rate === null) {
+          return {
+            ...row,
+            rateStatus: row.manualOverrideRate !== undefined ? "manual" : "failed",
+            lastFetchedAt: item.fetchedAt,
+            fetchError: item.message,
+          };
+        }
+        return {
+          ...row,
+          autoFetchedRate: item.rate,
+          rateStatus: row.manualOverrideRate !== undefined ? "manual" : "auto",
+          lastFetchedAt: item.fetchedAt,
+          fetchError: item.status === "needs-review" ? item.message : undefined,
+        };
+      });
+
+      return recalculateComparisonRows(
+        fetchedRows,
+        appData.loanProfile,
+        selectedScenario.monthlyPayment,
+      );
+    },
+    [appData.bankSources, appData.loanProfile, selectedScenario.monthlyPayment],
+  );
+
+  const refreshRates = useCallback(
+    async (force = false) => {
+      if (isFetchingRates) {
+        return;
+      }
+      const month = getCurrentMonthKey();
+      if (
+        !force &&
+        !isMonthlyAutoFetchDue(appData.rateFetchState?.checkedMonth)
+      ) {
+        return;
+      }
+
+      setIsFetchingRates(true);
+      const attemptAt = new Date().toISOString();
+      try {
+        const response = await fetchLatestRates(force);
+        const comparisonRows = applyFetchedRates(appData.comparisonRows, response);
+        persist(
+          {
+            ...appData,
+            comparisonRows,
+            rateFetchState: {
+              checkedMonth: response.month,
+              lastAttemptAt: attemptAt,
+              lastSuccessfulAt: response.fetchedAt,
+              source: "api",
+              message: response.message,
+            },
+          },
+          true,
+        );
+      } catch (error) {
+        persist(
+          {
+            ...appData,
+            rateFetchState: {
+              checkedMonth: month,
+              lastAttemptAt: attemptAt,
+              lastSuccessfulAt: appData.rateFetchState?.lastSuccessfulAt,
+              source: appData.rateFetchState?.source ?? "sample",
+              message:
+                error instanceof Error
+                  ? `${error.message} 前回値またはサンプル値を表示しています。`
+                  : "金利取得APIが失敗しました。前回値またはサンプル値を表示しています。",
+            },
+          },
+          true,
+        );
+      } finally {
+        setIsFetchingRates(false);
+      }
+    },
+    [appData, applyFetchedRates, isFetchingRates],
+  );
+
+  useEffect(() => {
+    if (activeView === "comparison" && isConfigured) {
+      void refreshRates(false);
+    }
+  }, [activeView, isConfigured, refreshRates]);
+
+  const recalculateRow = (rowId: string, manualRate: number | null) => {
+    const now = new Date().toISOString();
+    let updatedRow: BankComparisonRow | null = null;
+    const comparisonRows = appData.comparisonRows.map((row) => {
+      if (row.id !== rowId) {
+        return row;
+      }
+      const nextRow = recalculateComparisonRow(
+        {
+          ...row,
+          manualOverrideRate: manualRate ?? undefined,
+          lastManualUpdatedAt: manualRate !== null ? now : undefined,
+          rateStatus:
+            manualRate !== null
+              ? "manual"
+              : row.autoFetchedRate !== undefined
+                ? "auto"
+                : row.rateStatus ?? "sample",
+        },
+        appData.loanProfile,
+        selectedScenario.monthlyPayment,
+      );
+      updatedRow = nextRow;
+      return nextRow;
+    });
+
+    const refinanceResult =
+      updatedRow && !isBaseComparisonRow(updatedRow)
+        ? buildRefinanceResultFromComparisonRow(
+            updatedRow,
+            appData.refinanceResult.currentRemainingTotalPayment,
+            appData.refinanceCostBreakdown,
+            selectedScenario.monthlyPayment,
+            appData.loanProfile,
+          )
+        : appData.refinanceResult;
+
+    persist(
+      {
+        ...appData,
+        comparisonRows,
+        refinanceResult,
+        rateFetchState: {
+          ...appData.rateFetchState,
+          source: manualRate !== null ? "manual" : appData.rateFetchState?.source,
+          message:
+            manualRate !== null
+              ? "手入力補正値を優先して概算再判定しました。"
+              : "手入力補正を解除し、自動取得値またはサンプル値で概算再判定しました。",
+        },
+      },
+      true,
+    );
+  };
+
   const installApp = async () => {
     if (!installPrompt) {
       return;
@@ -199,7 +373,11 @@ export default function App() {
             rows={appData.comparisonRows}
             sources={appData.bankSources}
             selectedScenario={selectedScenario}
+            rateFetchState={appData.rateFetchState}
+            isFetchingRates={isFetchingRates}
             onOpenBank={openBank}
+            onRefreshRates={() => void refreshRates(true)}
+            onRecalculateRow={recalculateRow}
             onRefinance={() => setActiveView("refinance")}
           />
         );

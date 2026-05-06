@@ -60,6 +60,14 @@ export type BankComparisonRow = {
   id: string;
   bankName: string;
   effectiveRate: number;
+  autoFetchedRate?: number;
+  manualOverrideRate?: number;
+  rateUsedForCalculation?: number;
+  rateStatus?: "sample" | "auto" | "manual" | "failed";
+  lastFetchedAt?: string;
+  lastManualUpdatedAt?: string;
+  officialCheckedAt?: string;
+  fetchError?: string;
   insuranceLevel: string;
   monthlyPayment: number;
   netBenefit: number | null;
@@ -94,4 +102,29 @@ export type AppStorage = {
   refinanceResult: RefinanceResult;
   refinanceCostBreakdown: RefinanceCostBreakdown;
   lastCheckedAt?: string;
+  rateFetchState?: {
+    checkedMonth?: string;
+    lastAttemptAt?: string;
+    lastSuccessfulAt?: string;
+    source?: "api" | "manual" | "sample";
+    message?: string;
+  };
+};
+
+export type RateFetchItem = {
+  bankRateSourceId: string;
+  bankName: string;
+  rate: number | null;
+  status: "success" | "failed" | "needs-review";
+  fetchedAt: string;
+  sourceUrl: string;
+  message: string;
+};
+
+export type RateFetchResponse = {
+  month: string;
+  fetchedAt: string;
+  items: RateFetchItem[];
+  cached: boolean;
+  message: string;
 };
