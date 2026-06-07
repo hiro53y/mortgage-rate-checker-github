@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildRefinanceResultFromCurrentLoan,
+  deriveComparisonRowsFromLoan,
+  getLoanPaymentStalenessWarning,
   getRateUsedForCalculation,
   recalculateComparisonRow,
+  selectBestRefinanceCandidate,
 } from "../src/lib/comparisonMath.ts";
-import type { BankComparisonRow, LoanProfile } from "../src/types.ts";
+import type { BankComparisonRow, LoanProfile, RefinanceCostBreakdown } from "../src/types.ts";
 
 const row: BankComparisonRow = {
   id: "test-bank",
@@ -43,6 +47,14 @@ const loan: LoanProfile = {
   updatedAt: "2026-05-06T00:00:00.000+09:00",
 };
 
+const refinanceCosts: RefinanceCostBreakdown = {
+  loanFee: 330000,
+  registrationFee: 220000,
+  judicialScrivenerFee: 150000,
+  stampDuty: 60000,
+  prepaymentFee: 60000,
+};
+
 describe("comparisonMath", () => {
   it("prioritizes manual override over auto and sample rates", () => {
     assert.equal(getRateUsedForCalculation(row), 0.85);
@@ -52,6 +64,15 @@ describe("comparisonMath", () => {
         ...row,
         manualOverrideRate: undefined,
         autoFetchedRate: undefined,
+      }),
+      1.0,
+    );
+    assert.equal(
+      getRateUsedForCalculation({
+        ...row,
+        manualOverrideRate: undefined,
+        autoFetchedRate: undefined,
+        rateUsedForCalculation: 0.7,
       }),
       1.0,
     );
@@ -66,5 +87,67 @@ describe("comparisonMath", () => {
     assert.equal(recalculated.rateUsedForCalculation, 0.89);
     assert.ok(recalculated.monthlyPayment > 0);
     assert.ok(recalculated.netBenefit !== null);
+  });
+
+  it("derives comparison rows from the current loan and selects the best candidate", () => {
+    const changedLoan = {
+      ...loan,
+      currentRate: 1.005,
+      monthlyPayment: 90916,
+      bonusPayment: 114283,
+    };
+    const rows = deriveComparisonRowsFromLoan(
+      [
+        {
+          ...row,
+          id: "base",
+          bankName: "もみじ銀行（選択中シナリオ）",
+          effectiveRate: 1.005,
+          autoFetchedRate: undefined,
+          manualOverrideRate: undefined,
+          monthlyPayment: 90916,
+          netBenefit: null,
+        },
+        {
+          ...row,
+          id: "netbk-row",
+          bankName: "住信SBIネット銀行",
+          effectiveRate: 0.89,
+          autoFetchedRate: undefined,
+          manualOverrideRate: undefined,
+          insuranceLevel: "がん50%",
+          note: "保障条件は公式ページで要確認",
+        },
+      ],
+      changedLoan,
+    );
+
+    assert.equal(rows[0].bankName, "test（現在条件）");
+    assert.equal(rows[0].rateUsedForCalculation, 1.005);
+    assert.equal(rows[0].monthlyPayment, 90916);
+
+    const candidate = selectBestRefinanceCandidate(rows);
+    assert.ok(candidate);
+    assert.equal(candidate.id, "netbk-row");
+
+    const result = buildRefinanceResultFromCurrentLoan(
+      candidate,
+      refinanceCosts,
+      changedLoan,
+    );
+    assert.equal(result.candidateBankName, "住信SBIネット銀行");
+    assert.equal(result.candidateRate, 0.89);
+    assert.equal(result.baseMonthlyPayment, 90916);
+    assert.equal(result.candidateNeedsReview, true);
+    assert.ok(result.netBenefit > 0);
+  });
+
+  it("warns when the current rate changed but registered payments still look stale", () => {
+    const warning = getLoanPaymentStalenessWarning({
+      ...loan,
+      currentRate: 1.005,
+    });
+    assert.match(warning ?? "", /登録済み返済額に差/);
+    assert.match(warning ?? "", /毎月返済額/);
   });
 });

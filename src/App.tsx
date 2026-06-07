@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import {
-  buildRefinanceResultFromComparisonRow,
+  buildRefinanceResultFromCurrentLoan,
+  deriveComparisonRowsFromLoan,
+  getLoanPaymentStalenessWarning,
   isBaseComparisonRow,
-  recalculateComparisonRow,
-  recalculateComparisonRows,
+  selectBestRefinanceCandidate,
 } from "./lib/comparisonMath";
 import { fetchLatestRates, getCurrentMonthKey, isMonthlyAutoFetchDue } from "./lib/rateFetch";
 import { createSampleAppStorage } from "./lib/sampleData";
@@ -41,11 +42,30 @@ function getDefaultView(hasSavedData: boolean): ViewName {
   return hasSavedData ? "home" : "setup";
 }
 
+function deriveAppDataFromCurrentLoan(data: AppStorage): AppStorage {
+  const comparisonRows = deriveComparisonRowsFromLoan(data.comparisonRows, data.loanProfile);
+  const refinanceCandidate = selectBestRefinanceCandidate(comparisonRows);
+  return {
+    ...data,
+    comparisonRows,
+    refinanceResult: refinanceCandidate
+      ? buildRefinanceResultFromCurrentLoan(
+          refinanceCandidate,
+          data.refinanceCostBreakdown,
+          data.loanProfile,
+        )
+      : data.refinanceResult,
+  };
+}
+
 export default function App() {
-  const [initialStorage] = useState<AppStorage | null>(() => loadAppStorage());
+  const [initialStorage] = useState<AppStorage | null>(() => {
+    const loaded = loadAppStorage();
+    return loaded ? deriveAppDataFromCurrentLoan(loaded) : null;
+  });
   const [isConfigured, setIsConfigured] = useState(Boolean(initialStorage));
   const [appData, setAppData] = useState<AppStorage>(
-    () => initialStorage ?? createSampleAppStorage(),
+    () => initialStorage ?? deriveAppDataFromCurrentLoan(createSampleAppStorage()),
   );
   const [activeView, setActiveView] = useState<ViewName>(() =>
     getDefaultView(Boolean(initialStorage)),
@@ -93,12 +113,17 @@ export default function App() {
       createSampleAppStorage().scenarios[1],
     [appData.scenarios],
   );
+  const paymentWarning = useMemo(
+    () => getLoanPaymentStalenessWarning(appData.loanProfile),
+    [appData.loanProfile],
+  );
 
   const persist = (nextData: AppStorage, configured = true) => {
-    setAppData(nextData);
+    const derivedData = deriveAppDataFromCurrentLoan(nextData);
+    setAppData(derivedData);
     setIsConfigured(configured);
     if (configured) {
-      saveAppStorage(nextData);
+      saveAppStorage(derivedData);
     }
   };
 
@@ -203,13 +228,9 @@ export default function App() {
         };
       });
 
-      return recalculateComparisonRows(
-        fetchedRows,
-        appData.loanProfile,
-        selectedScenario.monthlyPayment,
-      );
+      return deriveComparisonRowsFromLoan(fetchedRows, appData.loanProfile);
     },
-    [appData.bankSources, appData.loanProfile, selectedScenario.monthlyPayment],
+    [appData.bankSources, appData.loanProfile],
   );
 
   const refreshRates = useCallback(
@@ -276,46 +297,27 @@ export default function App() {
 
   const recalculateRow = (rowId: string, manualRate: number | null) => {
     const now = new Date().toISOString();
-    let updatedRow: BankComparisonRow | null = null;
     const comparisonRows = appData.comparisonRows.map((row) => {
       if (row.id !== rowId) {
         return row;
       }
-      const nextRow = recalculateComparisonRow(
-        {
-          ...row,
-          manualOverrideRate: manualRate ?? undefined,
-          lastManualUpdatedAt: manualRate !== null ? now : undefined,
-          rateStatus:
-            manualRate !== null
-              ? "manual"
-              : row.autoFetchedRate !== undefined
-                ? "auto"
-                : row.rateStatus ?? "sample",
-        },
-        appData.loanProfile,
-        selectedScenario.monthlyPayment,
-      );
-      updatedRow = nextRow;
-      return nextRow;
+      return {
+        ...row,
+        manualOverrideRate: manualRate ?? undefined,
+        lastManualUpdatedAt: manualRate !== null ? now : undefined,
+        rateStatus:
+          manualRate !== null
+            ? "manual"
+            : row.autoFetchedRate !== undefined
+              ? "auto"
+              : row.rateStatus ?? "sample",
+      };
     });
-
-    const refinanceResult =
-      updatedRow && !isBaseComparisonRow(updatedRow)
-        ? buildRefinanceResultFromComparisonRow(
-            updatedRow,
-            appData.refinanceResult.currentRemainingTotalPayment,
-            appData.refinanceCostBreakdown,
-            selectedScenario.monthlyPayment,
-            appData.loanProfile,
-          )
-        : appData.refinanceResult;
 
     persist(
       {
         ...appData,
         comparisonRows,
-        refinanceResult,
         rateFetchState: {
           ...appData.rateFetchState,
           source: manualRate !== null ? "manual" : appData.rateFetchState?.source,
@@ -372,7 +374,8 @@ export default function App() {
           <BankComparisonPage
             rows={appData.comparisonRows}
             sources={appData.bankSources}
-            selectedScenario={selectedScenario}
+            loan={appData.loanProfile}
+            paymentWarning={paymentWarning}
             rateFetchState={appData.rateFetchState}
             isFetchingRates={isFetchingRates}
             onOpenBank={openBank}
@@ -386,7 +389,7 @@ export default function App() {
           <RefinanceBenefitPage
             result={appData.refinanceResult}
             costBreakdown={appData.refinanceCostBreakdown}
-            selectedScenario={selectedScenario}
+            paymentWarning={paymentWarning}
             onBack={() => setActiveView("comparison")}
             onSaveCandidate={saveRefinanceCandidate}
           />
@@ -409,6 +412,7 @@ export default function App() {
         return (
           <HomePage
             loan={appData.loanProfile}
+            paymentWarning={paymentWarning}
             lastCheckedAt={appData.lastCheckedAt}
             onCheckLatest={() => openBank(findMomijiSource(appData))}
             onScenario={() => setActiveView("scenario")}

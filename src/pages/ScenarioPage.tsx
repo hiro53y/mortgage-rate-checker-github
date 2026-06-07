@@ -6,7 +6,7 @@ import { ScenarioCard } from "../components/ScenarioCard";
 import { SectionTitle } from "../components/SectionTitle";
 import { formatRate, formatSignedRate } from "../lib/formatters";
 import { MOMIJI_LOWER_RATE } from "../lib/sampleData";
-import { calculateRateDifference } from "../lib/scenarioMath";
+import { calculateRateDifference, currentRateNegotiationSummary } from "../lib/scenarioMath";
 import type { LoanProfile, ScenarioRate } from "../types";
 
 type ScenarioPageProps = {
@@ -23,17 +23,18 @@ export function ScenarioPage({
   onOpenOfficial,
 }: ScenarioPageProps) {
   const rateDifference = calculateRateDifference(loan.currentRate, MOMIJI_LOWER_RATE);
+  const summary = currentRateNegotiationSummary(loan.currentRate, MOMIJI_LOWER_RATE);
 
   return (
     <div className="space-y-4">
       <header>
         <p className="text-xs font-bold text-navy-700">金利変更シナリオ</p>
         <h1 className="mt-1 text-2xl font-black tracking-normal text-slate-950">
-          現時点では交渉優先度は低めです
+          {summary.title}
         </h1>
       </header>
 
-      <Card tone="blue" className="space-y-4">
+      <Card tone={summary.tone} className="space-y-4">
         <dl>
           <InfoRow label="現在の適用金利" value={formatRate(loan.currentRate)} emphasis />
           <InfoRow
@@ -44,7 +45,7 @@ export function ScenarioPage({
           <InfoRow label="差（現在 - 下限金利）" value={formatSignedRate(rateDifference)} />
         </dl>
         <p className="rounded-lg bg-white px-3 py-3 text-sm leading-6 text-slate-700">
-          現在の適用金利は新規向け下限金利より低いため、現時点では金利引き下げ交渉の優先度は高くありません。通知後に再確認してください。
+          {summary.message}
         </p>
       </Card>
 

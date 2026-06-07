@@ -64,15 +64,15 @@ export const defaultScenarios: ScenarioRate[] = [
 export const defaultComparisonRows: BankComparisonRow[] = [
   {
     id: "momiji-scenario",
-    bankName: "もみじ銀行（選択中シナリオ）",
-    effectiveRate: 1.005,
-    rateUsedForCalculation: 1.005,
+    bankName: "もみじ銀行（現在条件）",
+    effectiveRate: 0.755,
+    rateUsedForCalculation: 0.755,
     rateStatus: "sample",
     insuranceLevel: "がん100%",
-    monthlyPayment: 90916,
+    monthlyPayment: 86689,
     netBenefit: null,
     isPriorityCandidate: false,
-    note: "選択中シナリオの基準",
+    note: "現在条件の基準",
   },
   {
     id: "mufg-row",
@@ -126,6 +126,12 @@ export const defaultComparisonRows: BankComparisonRow[] = [
 
 export const defaultRefinanceResult: RefinanceResult = {
   bankRateId: "netbk",
+  candidateBankName: "住信SBIネット銀行",
+  candidateRate: 0.89,
+  baseMonthlyPayment: 86689,
+  candidateNeedsReview: true,
+  candidateReviewWarning:
+    "公式確認が未完了、保障条件に要確認項目ありです。公式ページと手入力補正で条件を確認してください。",
   currentRemainingTotalPayment: 58420000,
   refinanceRemainingTotalPayment: 56980000,
   refinanceCosts: 820000,

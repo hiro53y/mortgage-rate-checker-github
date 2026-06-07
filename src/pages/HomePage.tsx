@@ -18,6 +18,7 @@ import type { LoanProfile } from "../types";
 
 type HomePageProps = {
   loan: LoanProfile;
+  paymentWarning: string | null;
   lastCheckedAt?: string;
   onCheckLatest: () => void;
   onScenario: () => void;
@@ -27,6 +28,7 @@ type HomePageProps = {
 
 export function HomePage({
   loan,
+  paymentWarning,
   lastCheckedAt,
   onCheckLatest,
   onScenario,
@@ -112,6 +114,14 @@ export function HomePage({
           <p className="mt-1 text-xs text-slate-500">6月・12月</p>
         </div>
       </div>
+
+      {paymentWarning ? (
+        <Card tone="amber">
+          <p className="text-sm font-semibold leading-6 text-amber-900">
+            {paymentWarning}
+          </p>
+        </Card>
+      ) : null}
 
       <div className="space-y-3">
         <Button fullWidth onClick={onCheckLatest}>

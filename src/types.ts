@@ -77,6 +77,11 @@ export type BankComparisonRow = {
 
 export type RefinanceResult = {
   bankRateId: string;
+  candidateBankName: string;
+  candidateRate: number;
+  baseMonthlyPayment: number;
+  candidateNeedsReview: boolean;
+  candidateReviewWarning?: string;
   currentRemainingTotalPayment: number;
   refinanceRemainingTotalPayment: number;
   refinanceCosts: number;

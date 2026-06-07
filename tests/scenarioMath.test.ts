@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   calculateAnnualIncrease,
   calculateRateDifference,
+  currentRateNegotiationSummary,
   scenarioJudgementText,
   shouldSuggestNegotiation,
 } from "../src/lib/scenarioMath.ts";
@@ -24,5 +25,11 @@ describe("scenarioMath", () => {
   it("returns scenario judgement text", () => {
     assert.match(scenarioJudgementText(0.95, 0.95), /同水準/);
     assert.match(scenarioJudgementText(1.005, 0.95), /交渉/);
+  });
+
+  it("returns current-rate negotiation messages by rate difference", () => {
+    assert.match(currentRateNegotiationSummary(1.005, 0.95).title, /交渉/);
+    assert.match(currentRateNegotiationSummary(0.95, 0.95).title, /同水準/);
+    assert.match(currentRateNegotiationSummary(0.755, 0.95).title, /低め/);
   });
 });

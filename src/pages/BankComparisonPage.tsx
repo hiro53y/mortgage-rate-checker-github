@@ -3,13 +3,14 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ComparisonTable } from "../components/ComparisonTable";
 import { SectionTitle } from "../components/SectionTitle";
-import { formatDateTimeJa, formatRate } from "../lib/formatters";
-import type { BankComparisonRow, BankRateSource, ScenarioRate } from "../types";
+import { formatDateTimeJa, formatMoney, formatRate } from "../lib/formatters";
+import type { BankComparisonRow, BankRateSource, LoanProfile } from "../types";
 
 type BankComparisonPageProps = {
   rows: BankComparisonRow[];
   sources: BankRateSource[];
-  selectedScenario: ScenarioRate;
+  loan: LoanProfile;
+  paymentWarning: string | null;
   rateFetchState?: {
     checkedMonth?: string;
     lastAttemptAt?: string;
@@ -27,7 +28,8 @@ type BankComparisonPageProps = {
 export function BankComparisonPage({
   rows,
   sources,
-  selectedScenario,
+  loan,
+  paymentWarning,
   rateFetchState,
   isFetchingRates,
   onOpenBank,
@@ -45,13 +47,20 @@ export function BankComparisonPage({
       <Card tone="blue" className="space-y-2">
         <SectionTitle title="比較条件" />
         <p className="text-sm font-bold text-slate-800">
-          選択中シナリオ {formatRate(selectedScenario.rate)} / 元利均等 / がん団信込み
+          現在条件 {formatRate(loan.currentRate)} / 登録月返済 {formatMoney(loan.monthlyPayment)} / がん団信込み
         </p>
-        <p className="text-xs text-slate-500">シナリオメモ: {selectedScenario.memo}</p>
         <p className="text-xs text-slate-500">
-          自動取得値は誤取得の可能性があります。公式確認と手入力補正を優先してください。
+          実質メリットは現在条件との差額を概算表示します。自動取得値は誤取得の可能性があるため、公式確認と手入力補正を優先してください。
         </p>
       </Card>
+
+      {paymentWarning ? (
+        <Card tone="amber">
+          <p className="text-sm font-semibold leading-6 text-amber-900">
+            {paymentWarning}
+          </p>
+        </Card>
+      ) : null}
 
       <Card className="space-y-3">
         <div className="flex items-start justify-between gap-3">
@@ -85,7 +94,7 @@ export function BankComparisonPage({
       />
 
       <p className="text-xs leading-5 text-slate-500">
-        実質メリットは、もみじ銀行（選択中シナリオ）との差額を12年分の目安で表示しています。手入力補正がある場合は手入力値を優先して概算再判定します。
+        実質メリットは、現在条件との差額を12年分の目安で表示しています。手入力補正がある場合は手入力値を優先して概算再判定します。
       </p>
 
       <Button fullWidth onClick={onRefinance}>

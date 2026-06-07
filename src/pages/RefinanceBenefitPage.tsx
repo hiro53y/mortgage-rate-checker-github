@@ -5,12 +5,12 @@ import { InfoRow } from "../components/InfoRow";
 import { MoneyDisplay } from "../components/MoneyDisplay";
 import { SectionTitle } from "../components/SectionTitle";
 import { formatMoney, formatPaybackMonths, formatRate } from "../lib/formatters";
-import type { RefinanceCostBreakdown, RefinanceResult, ScenarioRate } from "../types";
+import type { RefinanceCostBreakdown, RefinanceResult } from "../types";
 
 type RefinanceBenefitPageProps = {
   result: RefinanceResult;
   costBreakdown: RefinanceCostBreakdown;
-  selectedScenario: ScenarioRate;
+  paymentWarning: string | null;
   onBack: () => void;
   onSaveCandidate: () => void;
 };
@@ -18,10 +18,15 @@ type RefinanceBenefitPageProps = {
 export function RefinanceBenefitPage({
   result,
   costBreakdown,
-  selectedScenario,
+  paymentWarning,
   onBack,
   onSaveCandidate,
 }: RefinanceBenefitPageProps) {
+  const monthlyDifferenceText =
+    result.monthlyDifference >= 0
+      ? `-${formatMoney(result.monthlyDifference)}`
+      : `+${formatMoney(Math.abs(result.monthlyDifference))}`;
+
   return (
     <div className="space-y-4">
       <header>
@@ -33,10 +38,28 @@ export function RefinanceBenefitPage({
 
       <Card tone="blue">
         <p className="text-sm font-bold text-slate-800">
-          比較前提: 選択中シナリオ {formatRate(selectedScenario.rate)}
+          候補: {result.candidateBankName} / 使用金利 {formatRate(result.candidateRate)}
         </p>
-        <p className="mt-1 text-xs text-slate-500">シナリオメモ: {selectedScenario.memo}</p>
+        <p className="mt-1 text-xs text-slate-500">
+          比較基準: 現在条件の月返済 {formatMoney(result.baseMonthlyPayment)}
+        </p>
       </Card>
+
+      {paymentWarning ? (
+        <Card tone="amber">
+          <p className="text-sm font-semibold leading-6 text-amber-900">
+            {paymentWarning}
+          </p>
+        </Card>
+      ) : null}
+
+      {result.candidateReviewWarning ? (
+        <Card tone="amber">
+          <p className="text-sm font-semibold leading-6 text-amber-900">
+            {result.candidateReviewWarning}
+          </p>
+        </Card>
+      ) : null}
 
       <Card className="space-y-3">
         <SectionTitle title="借換え試算" />
@@ -61,12 +84,12 @@ export function RefinanceBenefitPage({
           label="概算メリット"
           value={result.netBenefit}
           helper="総返済額差から諸費用を差し引いた目安"
-          tone="positive"
+          tone={result.netBenefit >= 0 ? "positive" : "negative"}
         />
         <dl>
           <InfoRow
-            label="毎月差額"
-            value={`-${formatMoney(Math.abs(result.monthlyDifference))}`}
+            label="毎月差額（現在比）"
+            value={monthlyDifferenceText}
             emphasis
           />
           <InfoRow label="回収期間" value={formatPaybackMonths(result.paybackMonths)} />
