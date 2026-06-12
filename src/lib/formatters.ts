@@ -6,6 +6,11 @@ export function formatApproxMoney(value: number): string {
   return `約${formatMoney(value)}`;
 }
 
+export function formatApproxSignedMoney(value: number): string {
+  const sign = value > 0 ? "+" : "";
+  return `約${sign}${formatMoney(value)}`;
+}
+
 export function formatRate(value: number): string {
   return `${value.toFixed(3)}%`;
 }

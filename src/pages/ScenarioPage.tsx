@@ -53,7 +53,12 @@ export function ScenarioPage({
 
       <div className="space-y-3">
         {scenarios.map((scenario) => (
-          <ScenarioCard key={scenario.id} scenario={scenario} lowerRate={MOMIJI_LOWER_RATE} />
+          <ScenarioCard
+            key={scenario.id}
+            scenario={scenario}
+            lowerRate={MOMIJI_LOWER_RATE}
+            currentRate={loan.currentRate}
+          />
         ))}
       </div>
 

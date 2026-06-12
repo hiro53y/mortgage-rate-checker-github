@@ -1,3 +1,13 @@
+import type { LoanProfile, ScenarioRate } from "../types";
+import {
+  calculateEqualPeriodicPayment,
+  calculateEqualPrincipalAndInterestPayment,
+  calculateRemainingBonusPayments,
+  calculateRemainingMonths,
+} from "./mortgageMath.ts";
+
+const RATE_EQUAL_TOLERANCE = 0.0005;
+
 export function calculateAnnualIncrease(
   scenarioMonthlyPayment: number,
   currentMonthlyPayment: number,
@@ -14,11 +24,43 @@ export function calculateRateDifference(currentAppliedRate: number, lowerRate: n
   return currentAppliedRate - lowerRate;
 }
 
-export function shouldSuggestNegotiation(scenarioRate: number, lowerRate: number): boolean {
-  return scenarioRate > lowerRate;
+export function areRatesEqual(firstRate: number, secondRate: number): boolean {
+  return Math.abs(firstRate - secondRate) <= RATE_EQUAL_TOLERANCE;
 }
 
-export function scenarioJudgementText(scenarioRate: number, lowerRate: number): string {
+export function shouldSuggestNegotiation(scenarioRate: number, lowerRate: number): boolean {
+  return scenarioRate - lowerRate > RATE_EQUAL_TOLERANCE;
+}
+
+export function scenarioJudgementText(
+  scenarioRate: number,
+  lowerRate: number,
+  currentAppliedRate?: number,
+): string {
+  if (currentAppliedRate !== undefined && areRatesEqual(scenarioRate, currentAppliedRate)) {
+    if (shouldSuggestNegotiation(scenarioRate, lowerRate)) {
+      return "現在条件と同水準です。新規向け下限金利を上回るため、金利引き下げ交渉を検討してください";
+    }
+    if (areRatesEqual(scenarioRate, lowerRate)) {
+      return "現在条件・新規向け下限金利と同水準です";
+    }
+    return "現在条件と同水準で、新規向け下限金利より低い水準です";
+  }
+
+  if (currentAppliedRate !== undefined && scenarioRate < currentAppliedRate) {
+    if (shouldSuggestNegotiation(scenarioRate, lowerRate)) {
+      return "現在条件より低い金利ですが、新規向け下限金利は上回ります。交渉余地を確認してください";
+    }
+    if (areRatesEqual(scenarioRate, lowerRate)) {
+      return "現在条件より低く、新規向け下限金利と同水準です";
+    }
+    return "現在条件より低く、新規向け下限金利も下回る水準です";
+  }
+
+  if (currentAppliedRate !== undefined && scenarioRate > currentAppliedRate) {
+    return "現在条件より上昇するシナリオです。返済額増加と交渉余地を確認してください";
+  }
+
   if (shouldSuggestNegotiation(scenarioRate, lowerRate)) {
     return "新規向け下限金利を上回るため、金利引き下げ交渉を検討してください";
   }
@@ -30,7 +72,7 @@ export function currentRateNegotiationSummary(
   lowerRate: number,
 ): { title: string; message: string; tone: "blue" | "amber" } {
   const difference = calculateRateDifference(currentAppliedRate, lowerRate);
-  if (difference > 0.0005) {
+  if (difference > RATE_EQUAL_TOLERANCE) {
     return {
       title: "金利引き下げ交渉を検討してください",
       message:
@@ -38,7 +80,7 @@ export function currentRateNegotiationSummary(
       tone: "amber",
     };
   }
-  if (Math.abs(difference) <= 0.0005) {
+  if (areRatesEqual(currentAppliedRate, lowerRate)) {
     return {
       title: "新規向け下限金利と同水準です",
       message:
@@ -52,4 +94,68 @@ export function currentRateNegotiationSummary(
       "現在の適用金利は新規向け下限金利より低いため、現時点では金利引き下げ交渉の優先度は高くありません。通知後に再確認してください。",
     tone: "blue",
   };
+}
+
+export function deriveScenarioFromLoan(
+  scenario: ScenarioRate,
+  loan: LoanProfile,
+  lowerRate: number,
+): ScenarioRate {
+  if (areRatesEqual(scenario.rate, loan.currentRate)) {
+    return {
+      ...scenario,
+      monthlyPayment: loan.monthlyPayment,
+      bonusPayment: loan.bonusPayment,
+      annualIncrease: 0,
+      shouldSuggestNegotiation: shouldSuggestNegotiation(scenario.rate, lowerRate),
+      note: scenarioJudgementText(scenario.rate, lowerRate, loan.currentRate),
+    };
+  }
+
+  const remainingMonths = Math.max(
+    calculateRemainingMonths(loan.nextPaymentDate, loan.endDate),
+    1,
+  );
+  const remainingBonusPayments = calculateRemainingBonusPayments(
+    loan.nextPaymentDate,
+    loan.endDate,
+    loan.bonusMonths,
+  );
+  const monthlyPayment = Math.round(
+    calculateEqualPrincipalAndInterestPayment(
+      loan.currentBalanceMonthly,
+      scenario.rate,
+      remainingMonths,
+    ),
+  );
+  const bonusPayment = Math.round(
+    calculateEqualPeriodicPayment(
+      loan.currentBalanceBonus,
+      scenario.rate,
+      remainingBonusPayments,
+      2,
+    ),
+  );
+
+  return {
+    ...scenario,
+    monthlyPayment,
+    bonusPayment,
+    annualIncrease: calculateAnnualIncrease(
+      monthlyPayment,
+      loan.monthlyPayment,
+      bonusPayment,
+      loan.bonusPayment,
+    ),
+    shouldSuggestNegotiation: shouldSuggestNegotiation(scenario.rate, lowerRate),
+    note: scenarioJudgementText(scenario.rate, lowerRate, loan.currentRate),
+  };
+}
+
+export function deriveScenariosFromLoan(
+  scenarios: ScenarioRate[],
+  loan: LoanProfile,
+  lowerRate: number,
+): ScenarioRate[] {
+  return scenarios.map((scenario) => deriveScenarioFromLoan(scenario, loan, lowerRate));
 }

@@ -4,7 +4,12 @@ import type {
   RefinanceCostBreakdown,
   RefinanceResult,
 } from "../types";
-import { calculateRemainingMonths, calculateEqualPrincipalAndInterestPayment } from "./mortgageMath.ts";
+import {
+  calculateEqualPeriodicPayment,
+  calculateEqualPrincipalAndInterestPayment,
+  calculateRemainingBonusPayments,
+  calculateRemainingMonths,
+} from "./mortgageMath.ts";
 import {
   calculateNetBenefit,
   calculatePaybackMonths,
@@ -91,47 +96,6 @@ export function recalculateComparisonRows(
   return rows.map((row) => recalculateComparisonRow(row, loan, baseMonthlyPayment));
 }
 
-function calculateEqualPeriodicPayment(
-  principal: number,
-  annualRate: number,
-  periods: number,
-  paymentsPerYear: number,
-): number {
-  if (principal <= 0 || periods <= 0) {
-    return 0;
-  }
-  const periodicRate = annualRate / 100 / paymentsPerYear;
-  if (periodicRate === 0) {
-    return principal / periods;
-  }
-  const compounded = (1 + periodicRate) ** periods;
-  return (principal * periodicRate * compounded) / (compounded - 1);
-}
-
-function calculateRemainingBonusPayments(loan: LoanProfile): number {
-  const start = new Date(loan.nextPaymentDate);
-  const end = new Date(loan.endDate);
-  if (
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(end.getTime()) ||
-    end < start ||
-    loan.bonusMonths.length === 0
-  ) {
-    return 0;
-  }
-
-  let count = 0;
-  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-  const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
-  while (cursor <= endMonth) {
-    if (loan.bonusMonths.includes(cursor.getMonth() + 1)) {
-      count += 1;
-    }
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  return count;
-}
-
 function calculateTotalRefinanceCosts(refinanceCosts: RefinanceCostBreakdown): number {
   return (
     refinanceCosts.loanFee +
@@ -147,7 +111,11 @@ export function calculateCurrentRemainingTotalPayment(loan: LoanProfile): number
     calculateRemainingMonths(loan.nextPaymentDate, loan.endDate),
     1,
   );
-  const remainingBonusPayments = calculateRemainingBonusPayments(loan);
+  const remainingBonusPayments = calculateRemainingBonusPayments(
+    loan.nextPaymentDate,
+    loan.endDate,
+    loan.bonusMonths,
+  );
   return Math.round(
     loan.monthlyPayment * remainingMonths + loan.bonusPayment * remainingBonusPayments,
   );
@@ -248,7 +216,11 @@ export function getLoanPaymentStalenessWarning(loan: LoanProfile): string | null
       remainingMonths,
     ),
   );
-  const remainingBonusPayments = calculateRemainingBonusPayments(loan);
+  const remainingBonusPayments = calculateRemainingBonusPayments(
+    loan.nextPaymentDate,
+    loan.endDate,
+    loan.bonusMonths,
+  );
   const expectedBonusPayment = Math.round(
     calculateEqualPeriodicPayment(
       loan.currentBalanceBonus,

@@ -1,7 +1,7 @@
 import { AlertTriangle, TrendingUp } from "lucide-react";
 import type { ScenarioRate } from "../types";
-import { formatApproxMoney, formatRate } from "../lib/formatters";
-import { scenarioJudgementText } from "../lib/scenarioMath";
+import { formatApproxMoney, formatApproxSignedMoney, formatRate } from "../lib/formatters";
+import { areRatesEqual, scenarioJudgementText } from "../lib/scenarioMath";
 import { Card } from "./Card";
 import { InfoRow } from "./InfoRow";
 import { RateBadge } from "./RateBadge";
@@ -9,13 +9,20 @@ import { RateBadge } from "./RateBadge";
 type ScenarioCardProps = {
   scenario: ScenarioRate;
   lowerRate: number;
+  currentRate: number;
 };
 
-export function ScenarioCard({ scenario, lowerRate }: ScenarioCardProps) {
-  const suggestNegotiation = scenario.rate > lowerRate;
+export function ScenarioCard({ scenario, lowerRate, currentRate }: ScenarioCardProps) {
+  const suggestNegotiation = scenario.shouldSuggestNegotiation;
+  const matchesCurrentRate = areRatesEqual(scenario.rate, currentRate);
+  const isLowerThanCurrent = scenario.rate < currentRate && !matchesCurrentRate;
+  const tone = suggestNegotiation ? "amber" : isLowerThanCurrent ? "green" : "default";
+  const alertText = matchesCurrentRate
+    ? "現在条件は交渉検討水準"
+    : `${formatRate(scenario.rate)}は下限金利超過`;
 
   return (
-    <Card tone={suggestNegotiation ? "amber" : "default"} className="space-y-3">
+    <Card tone={tone} className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-slate-950">{scenario.name}</h3>
@@ -27,19 +34,22 @@ export function ScenarioCard({ scenario, lowerRate }: ScenarioCardProps) {
       {suggestNegotiation ? (
         <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold text-amber-800">
           <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-          {formatRate(scenario.rate)}なら交渉検討
+          {alertText}
         </div>
       ) : null}
 
       <dl>
         <InfoRow label="毎月返済額" value={formatApproxMoney(scenario.monthlyPayment)} emphasis />
         <InfoRow label="ボーナス返済額" value={formatApproxMoney(scenario.bonusPayment)} />
-        <InfoRow label="年間増加（現在比）" value={formatApproxMoney(scenario.annualIncrease)} />
+        <InfoRow
+          label="年間差額（現在比）"
+          value={formatApproxSignedMoney(scenario.annualIncrease)}
+        />
       </dl>
 
       <p className="flex gap-2 rounded-lg bg-white px-3 py-2 text-xs leading-5 text-slate-700">
         <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-navy-700" aria-hidden="true" />
-        {scenarioJudgementText(scenario.rate, lowerRate)}
+        {scenarioJudgementText(scenario.rate, lowerRate, currentRate)}
       </p>
     </Card>
   );
