@@ -8,7 +8,11 @@ import {
   selectBestRefinanceCandidate,
 } from "./lib/comparisonMath";
 import { fetchLatestRates, getCurrentMonthKey, isMonthlyAutoFetchDue } from "./lib/rateFetch";
-import { createSampleAppStorage, MOMIJI_LOWER_RATE } from "./lib/sampleData";
+import {
+  createSampleAppStorage,
+  ensureComparisonRowsIncludeBankSources,
+  MOMIJI_LOWER_RATE,
+} from "./lib/sampleData";
 import { deriveScenariosFromLoan } from "./lib/scenarioMath";
 import {
   clearAppStorage,
@@ -45,7 +49,10 @@ function getDefaultView(hasSavedData: boolean): ViewName {
 
 function deriveAppDataFromCurrentLoan(data: AppStorage): AppStorage {
   const scenarios = deriveScenariosFromLoan(data.scenarios, data.loanProfile, MOMIJI_LOWER_RATE);
-  const comparisonRows = deriveComparisonRowsFromLoan(data.comparisonRows, data.loanProfile);
+  const comparisonRows = deriveComparisonRowsFromLoan(
+    ensureComparisonRowsIncludeBankSources(data.comparisonRows, data.bankSources),
+    data.loanProfile,
+  );
   const refinanceCandidate = selectBestRefinanceCandidate(
     comparisonRows,
     data.refinanceCostBreakdown,

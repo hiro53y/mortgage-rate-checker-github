@@ -5,8 +5,9 @@ import type {
   RefinanceCostBreakdown,
   RefinanceResult,
   ScenarioRate,
+  BankRateSource,
 } from "../types";
-import { bankRateSources } from "./bankSources";
+import { bankRateSources } from "./bankSources.ts";
 
 export const MOMIJI_LOWER_RATE = 0.95;
 
@@ -127,7 +128,100 @@ export const defaultComparisonRows: BankComparisonRow[] = [
     isPriorityCandidate: false,
     note: "がん団信上乗せ条件は要確認",
   },
+  {
+    id: "jibun-row",
+    rowKind: "candidate",
+    bankName: "auじぶん銀行",
+    effectiveRate: 0.95,
+    rateUsedForCalculation: 0.95,
+    rateStatus: "sample",
+    insuranceLevel: "がん50 / がん100を区別",
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note: "借換え上位候補。公式取得または手入力補正で確認",
+  },
+  {
+    id: "paypay-row",
+    rowKind: "candidate",
+    bankName: "PayPay銀行",
+    effectiveRate: 0.95,
+    rateUsedForCalculation: 0.95,
+    rateStatus: "sample",
+    insuranceLevel: "がん100など要確認",
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note: "借換え上位候補。公式取得または手入力補正で確認",
+  },
+  {
+    id: "sbishinsei-row",
+    rowKind: "candidate",
+    bankName: "SBI新生銀行",
+    effectiveRate: 0.95,
+    rateUsedForCalculation: 0.95,
+    rateStatus: "sample",
+    insuranceLevel: "ガン団信 +0.1%",
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note: "借換え上位候補。公式取得または手入力補正で確認",
+  },
 ];
+
+const fallbackSampleRates: Record<string, number> = {
+  mufg: 0.995,
+  smbc: 1.1,
+  mizuho: 1.2,
+  resona: 1.0,
+  netbk: 0.95,
+  jibun: 0.95,
+  paypay: 0.95,
+  sbishinsei: 0.95,
+  sonybank: 1.0,
+  rakuten: 1.0,
+  hirogin: 0.95,
+  chugin: 0.95,
+};
+
+function createComparisonRowFromSource(source: BankRateSource): BankComparisonRow {
+  const effectiveRate = fallbackSampleRates[source.id] ?? 1.0;
+  return {
+    id: `${source.id}-row`,
+    rowKind: "candidate",
+    bankName: source.bankName,
+    effectiveRate,
+    rateUsedForCalculation: effectiveRate,
+    rateStatus: "sample",
+    insuranceLevel: source.cancerInsuranceTarget,
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note:
+      source.id === "paypay" || source.id === "sbishinsei" || source.id === "jibun"
+        ? "借換え上位候補。公式取得または手入力補正で確認"
+        : source.note,
+  };
+}
+
+export function ensureComparisonRowsIncludeBankSources(
+  rows: BankComparisonRow[],
+  sources: BankRateSource[],
+): BankComparisonRow[] {
+  const nextRows = [...rows];
+  for (const source of sources) {
+    if (source.id === "momiji") {
+      continue;
+    }
+    const exists = nextRows.some(
+      (row) => row.id === `${source.id}-row` || row.bankName.includes(source.bankName),
+    );
+    if (!exists) {
+      nextRows.push(createComparisonRowFromSource(source));
+    }
+  }
+  return nextRows;
+}
 
 export const defaultRefinanceResult: RefinanceResult = {
   bankRateId: "netbk",
@@ -166,7 +260,7 @@ export function createSampleAppStorage(): AppStorage {
       loanProfile: defaultLoanProfile,
       scenarios: defaultScenarios,
       bankSources: bankRateSources,
-      comparisonRows: defaultComparisonRows,
+      comparisonRows: ensureComparisonRowsIncludeBankSources(defaultComparisonRows, bankRateSources),
       refinanceResult: null,
       refinanceCostBreakdown: defaultRefinanceCostBreakdown,
       rateFetchState: {

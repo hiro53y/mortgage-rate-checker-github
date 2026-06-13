@@ -39,11 +39,60 @@ describe("rate extraction", () => {
     );
   });
 
+  it("rejects review-era rates and fee percentages that are not current variable rates", () => {
+    assert.equal(
+      extractRate("<p>口コミ 金利種別 変動金利 金 利 0.400%位 借入時期 2019年1月</p>", {
+        bankName: "住信SBIネット銀行",
+        preferredKeywords: ["変動", "住宅ローン"],
+        minExpectedRate: 0.7,
+        maxExpectedRate: 1.5,
+      }),
+      null,
+    );
+    assert.equal(
+      extractRate("<p>住宅ローン 別途借入金額の2.20%(税込)の事務手数料が発生します。</p>", {
+        bankName: "広島銀行",
+        preferredKeywords: ["住宅ローン", "スーパー住宅ローン"],
+        minExpectedRate: 0.7,
+        maxExpectedRate: 1.2,
+      }),
+      null,
+    );
+  });
+
   it("keeps Japanese long vowel marks when scoring mortgage loan context", () => {
     assert.equal(
       extractRate("<p>YCG住宅ローン 融資手数料型3 がん100%込み 下限金利 年0.950%</p>", {
         preferredKeywords: ["住宅ローン", "融資手数料型", "下限"],
       }),
+      0.95,
+    );
+  });
+
+  it("uses bounded bank-specific contexts for Hiroshima Bank and SBI Sumishin Net Bank", () => {
+    assert.equal(
+      extractRateFromAggregate(
+        "<article><h1>広島銀行の住宅ローン金利推移</h1><p>年月 変動金利 10年固定 フラット35</p><p>2026/06 0.950% 3.100% 2.710% 2.210%</p><p>2025/09 0.700% 2.300% 1.870% 1.370%</p></article>",
+        {
+          bankName: "広島銀行",
+          preferredKeywords: ["変動", "住宅ローン", "スーパー住宅ローン"],
+          minExpectedRate: 0.7,
+          maxExpectedRate: 1.2,
+        },
+      ),
+      0.95,
+    );
+    assert.equal(
+      extractRateFromAggregate(
+        "<section><h3>住信SBIネット銀行 WEB申込コース 借換 変動金利</h3><p>適用金利 年0.950%</p><p>口コミ 金利 0.400%位</p></section>",
+        {
+          bankName: "住信SBIネット銀行",
+          aggregateAliases: ["住信SBI", "NEOBANK"],
+          preferredKeywords: ["借換", "変動", "適用金利"],
+          minExpectedRate: 0.7,
+          maxExpectedRate: 1.5,
+        },
+      ),
       0.95,
     );
   });

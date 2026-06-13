@@ -6,6 +6,7 @@ const MIN_CONFIDENCE_SCORE = 5;
 
 const AGGREGATE_RATE_URLS = [
   "https://mogecheck.jp/mortgage-ranking/refinance",
+  "https://s.kakaku.com/housing-loan/ranking.asp?hl_ltype=1&utm_source=chatgpt.com",
   "https://kakaku.com/housing-loan/ranking.asp?hl_ltype=1",
   "https://diamond-fudosan.jp/category/housing-loan",
 ];
@@ -76,6 +77,13 @@ const BANK_SOURCES = [
     ],
     preferredKeywords: ["変動", "WEB申込", "WEB申込コース", "借換", "住宅ローン", "表面金利"],
     aggregateAliases: ["住信SBIネット銀行", "住信SBI", "NEOBANK", "SBI"],
+    aggregateRateUrls: [
+      "https://s.kakaku.com/housing-loan/ranking.asp?hl_ltype=1&utm_source=chatgpt.com",
+      "https://kakaku.com/housing-loan/ranking.asp?hl_ltype=1",
+      "https://mogecheck.jp/mortgage-ranking/refinance",
+    ],
+    minExpectedRate: 0.7,
+    maxExpectedRate: 1.5,
   },
   {
     id: "jibun",
@@ -85,6 +93,14 @@ const BANK_SOURCES = [
       "https://www.jibunbank.co.jp/products/homeloan/",
     ],
     preferredKeywords: ["変動", "住宅ローン", "借換"],
+    aggregateAliases: ["auじぶん銀行", "じぶん銀行"],
+    aggregateRateUrls: [
+      "https://mogecheck.jp/mortgage-ranking/refinance",
+      "https://s.kakaku.com/housing-loan/ranking.asp?hl_ltype=1&utm_source=chatgpt.com",
+      "https://kakaku.com/housing-loan/ranking.asp?hl_ltype=1",
+    ],
+    minExpectedRate: 0.7,
+    maxExpectedRate: 1.5,
   },
   {
     id: "paypay",
@@ -94,6 +110,14 @@ const BANK_SOURCES = [
       "https://www.paypay-bank.co.jp/mortgage/",
     ],
     preferredKeywords: ["変動", "住宅ローン", "金利"],
+    aggregateAliases: ["PayPay銀行", "ペイペイ銀行", "PayPay"],
+    aggregateRateUrls: [
+      "https://mogecheck.jp/mortgage-ranking/refinance",
+      "https://s.kakaku.com/housing-loan/ranking.asp?hl_ltype=1&utm_source=chatgpt.com",
+      "https://kakaku.com/housing-loan/ranking.asp?hl_ltype=1",
+    ],
+    minExpectedRate: 0.7,
+    maxExpectedRate: 1.5,
   },
   {
     id: "sbishinsei",
@@ -103,6 +127,14 @@ const BANK_SOURCES = [
       "https://www.sbishinseibank.co.jp/retail/housing/interest/",
     ],
     preferredKeywords: ["変動", "住宅ローン", "金利"],
+    aggregateAliases: ["SBI新生銀行", "SBI新生", "新生銀行"],
+    aggregateRateUrls: [
+      "https://mogecheck.jp/mortgage-ranking/refinance",
+      "https://s.kakaku.com/housing-loan/ranking.asp?hl_ltype=1&utm_source=chatgpt.com",
+      "https://kakaku.com/housing-loan/ranking.asp?hl_ltype=1",
+    ],
+    minExpectedRate: 0.7,
+    maxExpectedRate: 1.5,
   },
   {
     id: "sonybank",
@@ -132,6 +164,13 @@ const BANK_SOURCES = [
     ],
     preferredKeywords: ["変動", "住宅ローン", "スーパー住宅ローン", "地銀", "表面金利"],
     aggregateAliases: ["広島銀行", "ひろぎん", "hirogin"],
+    aggregateRateUrls: [
+      "https://diamond-fudosan.jp/articles/-/1111034",
+      "https://diamond-fudosan.jp/category/housing-loan",
+      "https://mogecheck.jp/mortgage-ranking/refinance",
+    ],
+    minExpectedRate: 0.7,
+    maxExpectedRate: 1.2,
   },
   {
     id: "chugin",
@@ -280,20 +319,110 @@ function scoreContext(context, source = {}) {
   return score;
 }
 
+function isRateWithinSourceBounds(rate, source = {}) {
+  if (!Number.isFinite(rate) || rate < MIN_RATE || rate > MAX_RATE) {
+    return false;
+  }
+  if (source.minExpectedRate !== undefined && rate < source.minExpectedRate) {
+    return false;
+  }
+  if (source.maxExpectedRate !== undefined && rate > source.maxExpectedRate) {
+    return false;
+  }
+  return true;
+}
+
+function extractLatestMonthlyTableRate(text, source = {}, date = new Date()) {
+  const aliases = getBankAliases(source);
+  const currentMonth = getMonthKey(date).replace("-", "/");
+  const rows = [];
+  const rowRegex = /(20\d{2})[/-](0[1-9]|1[0-2])\s+([0-9]+(?:\.[0-9]{1,3})?)\s*%/g;
+  let match;
+
+  while ((match = rowRegex.exec(text)) !== null) {
+    const rate = Number(match[3]);
+    if (!isRateWithinSourceBounds(rate, source)) {
+      continue;
+    }
+
+    const context = text.slice(Math.max(0, match.index - 160), match.index + 120);
+    const hasMonthlyRateContext =
+      /住宅ローン|変動金利|金利推移|借り換え|借換/.test(context) ||
+      aliases.some((alias) => context.includes(alias));
+    if (!hasMonthlyRateContext) {
+      continue;
+    }
+
+    const monthKey = `${match[1]}/${match[2]}`;
+    rows.push({
+      rate,
+      monthKey,
+      monthValue: Number(`${match[1]}${match[2]}`),
+    });
+  }
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const currentMonthRow = rows.find((row) => row.monthKey === currentMonth);
+  if (currentMonthRow) {
+    return currentMonthRow.rate;
+  }
+
+  rows.sort((a, b) => b.monthValue - a.monthValue);
+  return rows[0].rate;
+}
+
+function shouldRejectRateCandidate({ rate, context, localPrefix, localSuffix, source = {} }) {
+  const text = `${localPrefix} ${context} ${localSuffix}`.normalize("NFKC");
+  const nearPrefix = localPrefix.slice(-16);
+  const nearText = `${nearPrefix} ${localSuffix}`.normalize("NFKC");
+  const immediateSuffix = localSuffix.slice(0, 12).normalize("NFKC");
+  if (!isRateWithinSourceBounds(rate, source)) {
+    return true;
+  }
+  if (/口コミ|評判|利用者|回答時期|借入時期|推奨度合|物件|物 件|金利種別/.test(localPrefix)) {
+    return true;
+  }
+  if (/％位|%位|位|くらい|程度/.test(immediateSuffix) && /借入時期|回答時期|口コミ|評判/.test(text)) {
+    return true;
+  }
+  if (/事務手数料|手数料\(税込\)|手数料税込|借入額×|融資実行額|保証料/.test(nearText)) {
+    return true;
+  }
+  if (/上乗せ|上乗せ金利|保険料/.test(nearText)) {
+    return true;
+  }
+  if (/固定金利|固定期間|フラット35|Flat35|10年固定|20年固定|35年固定/.test(nearPrefix)) {
+    return true;
+  }
+  return false;
+}
+
 export function extractRate(html, source = {}) {
   const text = normalizeText(html);
+  const monthlyTableRate = extractLatestMonthlyTableRate(text, source);
+  if (monthlyTableRate !== null) {
+    return monthlyTableRate;
+  }
+
   const candidates = [];
   const regex = /([0-9]+(?:\.[0-9]{1,3})?)\s*%/g;
   let match;
 
   while ((match = regex.exec(text)) !== null) {
     const rate = Number(match[1]);
-    if (!Number.isFinite(rate) || rate < MIN_RATE || rate > MAX_RATE) {
+    if (!isRateWithinSourceBounds(rate, {})) {
       continue;
     }
 
     const context = text.slice(Math.max(0, match.index - 120), match.index + 140);
     const localPrefix = text.slice(Math.max(0, match.index - 32), match.index);
+    const localSuffix = text.slice(match.index + match[0].length, match.index + match[0].length + 32);
+    if (shouldRejectRateCandidate({ rate, context, localPrefix, localSuffix, source })) {
+      continue;
+    }
     let score = scoreContext(context, source);
     if (/表面金利|適用金利|優遇金利|変動金利|下限金利/.test(localPrefix)) {
       score += 10;

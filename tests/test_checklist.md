@@ -2,6 +2,22 @@
 
 ## 2026-06-13
 
+- [x] 住信SBIネット銀行の口コミ欄にある過去年利 0.400% を現在の変動金利として採用しないこと
+- [x] 広島銀行の事務手数料・固定金利列・過去月表の数値を現在の変動金利として採用しないこと
+- [x] 広島銀行のダイヤモンド不動産研究所ページでは、最新月の変動金利列 0.950% を優先すること
+- [x] 住信SBIネット銀行は価格.com/モゲチェックを補助取得先として確認できること
+- [x] PayPay銀行・SBI新生銀行・auじぶん銀行が既存保存データでも比較表に補完されること
+- [x] PayPay銀行・SBI新生銀行・auじぶん銀行も借換えランキング系ページを補助取得先に含めること
+- [x] 画面下部に `更新: 2026/06/13 v6` が表示されること
+- [x] Service Workerのキャッシュ名が `mortgage-rate-checker-v6-20260613` であること
+- [x] ルート `npm test`
+- [x] ルート `node --check functions/api/rates.js`
+- [x] ルート `npx tsc -b`
+- [x] ルート `npm run build`（通常実行は `EPERM`、権限付き再実行で成功）
+- [x] `deliverables/mortgage-rate-checker-github/` 内で `npm test`
+- [x] `deliverables/mortgage-rate-checker-github/` 内で `node --check functions/api/rates.js`
+- [x] `deliverables/mortgage-rate-checker-github/` 内で `npx tsc -b`
+- [x] `deliverables/mortgage-rate-checker-github/` 内で `npm run build`（通常実行は `EPERM`、権限付き再実行で成功）
 - [x] 「交渉優先度は低め」文言が試算画面から消えること
 - [x] 現在金利 1.005% と下限 0.950% の判定が「現在金利は下限金利より高い」になること
 - [x] 試算画面に判定式 `1.005% - 0.950% = +0.055%` が表示されること
@@ -30,9 +46,9 @@
 - [x] `deliverables/mortgage-rate-checker-github/` 内で `npx tsc -b`
 - [x] ルート `npm run build`（通常実行は `EPERM`、権限付き再実行で成功）
 - [x] `deliverables/mortgage-rate-checker-github/` 内で `npm run build`（通常実行は `EPERM`、権限付き再実行で成功）
-- [ ] ローカルVite画面確認（v4では未実施。Vite/esbuild起動が `EPERM`）
-- [ ] ローカルViteスマホ幅確認（v4では未実施。Vite/esbuild起動が `EPERM`）
-- [ ] 公開URLのv4反映確認（GitHub commit/pushとCloudflare Pages再デプロイ後に実施）
+- [ ] ローカルVite画面確認（v6では未実施）
+- [ ] ローカルViteスマホ幅確認（v6では未実施）
+- [ ] 公開URLのv6反映確認（GitHub commit/pushとCloudflare Pages再デプロイ後に実施）
 
 ## 2026-06-12
 

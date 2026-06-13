@@ -9,6 +9,7 @@ import {
   recalculateComparisonRow,
   selectBestRefinanceCandidate,
 } from "../src/lib/comparisonMath.ts";
+import { ensureComparisonRowsIncludeBankSources } from "../src/lib/sampleData.ts";
 import type { BankComparisonRow, LoanProfile, RefinanceCostBreakdown } from "../src/types.ts";
 
 const row: BankComparisonRow = {
@@ -290,5 +291,62 @@ describe("comparisonMath", () => {
     );
 
     assert.equal(selected?.id, "lower-rate");
+  });
+
+  it("adds ranking candidate banks that are missing from saved comparison rows", () => {
+    const rows = ensureComparisonRowsIncludeBankSources(
+      [
+        {
+          ...row,
+          id: "base",
+          bankName: "もみじ銀行（現在条件）",
+          autoFetchedRate: undefined,
+          manualOverrideRate: undefined,
+          netBenefit: null,
+        },
+      ],
+      [
+        {
+          id: "momiji",
+          bankName: "もみじ銀行",
+          productName: "test",
+          rateUrl: "https://example.com/momiji",
+          insuranceUrl: "https://example.com/momiji",
+          ratePurpose: "current",
+          compareType: "current",
+          targetRateType: "variable",
+          cancerInsuranceTarget: "がん100%",
+          note: "base",
+        },
+        {
+          id: "paypay",
+          bankName: "PayPay銀行",
+          productName: "test",
+          rateUrl: "https://example.com/paypay",
+          insuranceUrl: "https://example.com/paypay",
+          ratePurpose: "refinance",
+          compareType: "refinance",
+          targetRateType: "variable",
+          cancerInsuranceTarget: "要確認",
+          note: "ranking",
+        },
+        {
+          id: "sbishinsei",
+          bankName: "SBI新生銀行",
+          productName: "test",
+          rateUrl: "https://example.com/sbishinsei",
+          insuranceUrl: "https://example.com/sbishinsei",
+          ratePurpose: "refinance",
+          compareType: "refinance",
+          targetRateType: "variable",
+          cancerInsuranceTarget: "要確認",
+          note: "ranking",
+        },
+      ],
+    );
+
+    assert.ok(rows.some((candidateRow) => candidateRow.bankName === "PayPay銀行"));
+    assert.ok(rows.some((candidateRow) => candidateRow.bankName === "SBI新生銀行"));
+    assert.equal(rows.filter((candidateRow) => candidateRow.bankName.includes("もみじ")).length, 1);
   });
 });
