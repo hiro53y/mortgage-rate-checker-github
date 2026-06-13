@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { extractRate, getRateUrls } from "../functions/api/rates.js";
+import {
+  extractRate,
+  extractRateFromAggregate,
+  getRateUrls,
+} from "../functions/api/rates.js";
 
 describe("rate extraction", () => {
   it("prefers mortgage variable-rate context over insurance add-on rates", () => {
@@ -44,6 +48,46 @@ describe("rate extraction", () => {
     );
   });
 
+  it("prefers surface or applicable rates over aggregate effective rates", () => {
+    const html = `
+      <section>
+        <h3>三菱UFJ銀行 住宅ローン（事務手数料型）・変動金利</h3>
+        <p>実質金利(手数料込) 1.080%</p>
+        <p>表面金利 年0.945%</p>
+      </section>
+    `;
+
+    assert.equal(
+      extractRateFromAggregate(html, {
+        bankName: "三菱UFJ銀行",
+        preferredKeywords: ["変動", "住宅ローン", "表面金利"],
+      }),
+      0.945,
+    );
+  });
+
+  it("extracts bank-specific rates from aggregate pages by aliases", () => {
+    const html = `
+      <section>
+        <h3>住信SBIネット銀行 WEB申込コース 借換 変動金利</h3>
+        <p>適用金利 年0.950%</p>
+      </section>
+      <section>
+        <h3>別の銀行 変動金利</h3>
+        <p>適用金利 年0.500%</p>
+      </section>
+    `;
+
+    assert.equal(
+      extractRateFromAggregate(html, {
+        bankName: "住信SBIネット銀行",
+        aggregateAliases: ["住信SBI", "NEOBANK"],
+        preferredKeywords: ["借換", "変動", "適用金利"],
+      }),
+      0.95,
+    );
+  });
+
   it("builds rate URL candidates from rateUrls first and keeps rateUrl fallback", () => {
     assert.deepEqual(
       getRateUrls({
@@ -51,6 +95,26 @@ describe("rate extraction", () => {
         rateUrl: "https://example.com/rate",
       }),
       ["https://example.com/rate", "https://example.com/loan"],
+    );
+  });
+
+  it("includes the revised official pages for Hiroshima Bank and SBI Sumishin Net Bank", () => {
+    assert.deepEqual(
+      getRateUrls({
+        rateUrls: [
+          "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
+          "https://www.netbk.co.jp/contents/lineup/home-loan/web/kinri/",
+        ],
+      }),
+      [
+        "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
+        "https://www.netbk.co.jp/contents/lineup/home-loan/web/kinri/",
+      ],
+    );
+    assert.ok(
+      getRateUrls({
+        rateUrls: ["https://www.hirogin.co.jp/service/loan/housing-loan/super/"],
+      }).includes("https://www.hirogin.co.jp/service/loan/housing-loan/super/"),
     );
   });
 });

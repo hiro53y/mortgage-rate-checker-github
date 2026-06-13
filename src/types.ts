@@ -150,6 +150,7 @@ export type RateFetchItem = {
   status: "success" | "failed" | "needs-review";
   fetchedAt: string;
   sourceUrl: string;
+  attemptedUrls?: string[];
   message: string;
 };
 

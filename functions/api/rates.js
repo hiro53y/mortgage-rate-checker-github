@@ -1,8 +1,14 @@
-const MAX_URLS_PER_SOURCE = 5;
+const MAX_URLS_PER_SOURCE = 8;
 const FETCH_TIMEOUT_MS = 12000;
 const MIN_RATE = 0.25;
 const MAX_RATE = 3.0;
 const MIN_CONFIDENCE_SCORE = 5;
+
+const AGGREGATE_RATE_URLS = [
+  "https://mogecheck.jp/mortgage-ranking/refinance",
+  "https://kakaku.com/housing-loan/ranking.asp?hl_ltype=1",
+  "https://diamond-fudosan.jp/category/housing-loan",
+];
 
 const REQUEST_HEADERS = {
   accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7",
@@ -64,10 +70,12 @@ const BANK_SOURCES = [
     id: "netbk",
     bankName: "住信SBIネット銀行",
     rateUrls: [
+      "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
       "https://www.netbk.co.jp/contents/lineup/home-loan/web/kinri/",
       "https://www.netbk.co.jp/contents/lineup/home-loan/",
     ],
-    preferredKeywords: ["変動", "WEB申込", "借換", "住宅ローン"],
+    preferredKeywords: ["変動", "WEB申込", "WEB申込コース", "借換", "住宅ローン", "表面金利"],
+    aggregateAliases: ["住信SBIネット銀行", "住信SBI", "NEOBANK", "SBI"],
   },
   {
     id: "jibun",
@@ -118,10 +126,12 @@ const BANK_SOURCES = [
     id: "hirogin",
     bankName: "広島銀行",
     rateUrls: [
+      "https://www.hirogin.co.jp/service/loan/housing-loan/super/",
       "https://www.hirogin.co.jp/service/loan/housing-loan/otoku/",
       "https://www.hirogin.co.jp/service/loan/housing-loan/",
     ],
-    preferredKeywords: ["変動", "住宅ローン", "地銀"],
+    preferredKeywords: ["変動", "住宅ローン", "スーパー住宅ローン", "地銀", "表面金利"],
+    aggregateAliases: ["広島銀行", "ひろぎん", "hirogin"],
   },
   {
     id: "chugin",
@@ -209,6 +219,16 @@ export function getRateUrls(source) {
   return dedupeUrls([...(source.rateUrls ?? []), source.rateUrl]);
 }
 
+function getAggregateRateUrls(source) {
+  return dedupeUrls([...(source.aggregateRateUrls ?? []), ...AGGREGATE_RATE_URLS]);
+}
+
+function getBankAliases(source = {}) {
+  return dedupeUrls([source.bankName, ...(source.aggregateAliases ?? [])]).map((alias) =>
+    alias.normalize("NFKC"),
+  );
+}
+
 function safeDecodeURIComponent(value) {
   try {
     return decodeURIComponent(value);
@@ -229,6 +249,7 @@ function scoreContext(context, source = {}) {
   if (contextHas(text, /変動金利|変動/)) score += 12;
   if (contextHas(text, /借換|借り換え|借換え|お借換/)) score += 5;
   if (contextHas(text, /適用金利|優遇金利|下限|最優遇|金利プラン|新規|当初/)) score += 3;
+  if (contextHas(text, /表面金利|店頭金利ではなく|適用利率/)) score += 6;
   if (contextHas(text, /年\s*[0-9.]+\s*%|金利/)) score += 2;
 
   for (const keyword of source.preferredKeywords ?? []) {
@@ -248,6 +269,9 @@ function scoreContext(context, source = {}) {
   }
   if (contextHas(text, /店頭表示金利|基準金利|基準利率|引下げ幅|引き下げ幅/)) {
     score -= 4;
+  }
+  if (contextHas(text, /実質金利|手数料込|手数料込み|総返済額|毎月返済額|月々の返済額/)) {
+    score -= 6;
   }
   if (contextHas(text, /団信|疾病|がん|保障|特約/)) {
     score -= 1;
@@ -269,7 +293,14 @@ export function extractRate(html, source = {}) {
     }
 
     const context = text.slice(Math.max(0, match.index - 120), match.index + 140);
-    const score = scoreContext(context, source);
+    const localPrefix = text.slice(Math.max(0, match.index - 32), match.index);
+    let score = scoreContext(context, source);
+    if (/表面金利|適用金利|優遇金利|変動金利|下限金利/.test(localPrefix)) {
+      score += 10;
+    }
+    if (/実質金利|手数料込|手数料込み|上乗せ|保証料|保険料/.test(localPrefix)) {
+      score -= 12;
+    }
     if (score < MIN_CONFIDENCE_SCORE) {
       continue;
     }
@@ -286,6 +317,60 @@ export function extractRate(html, source = {}) {
   });
 
   return candidates[0].rate;
+}
+
+export function extractRateFromAggregate(html, source = {}) {
+  const text = normalizeText(html);
+  const aliases = getBankAliases(source);
+  const makeBlockSnippets = (pattern) =>
+    html
+      .split(pattern)
+      .map((block) => normalizeText(block))
+      .filter((block) => block.length > 0 && aliases.some((alias) => block.includes(alias)))
+      .slice(0, 12);
+  const semanticBlockSnippets = makeBlockSnippets(/<\/(?:section|article|tr|li)>/gi);
+  const divBlockSnippets = makeBlockSnippets(/<\/div>/gi);
+  const indexedSnippets = [];
+
+  for (const alias of aliases) {
+    let index = text.indexOf(alias);
+    while (index !== -1 && indexedSnippets.length < 12) {
+      indexedSnippets.push(text.slice(Math.max(0, index - 80), index + 220));
+      index = text.indexOf(alias, index + alias.length);
+    }
+  }
+
+  const aggregateSource = {
+    ...source,
+    preferredKeywords: [
+      ...(source.preferredKeywords ?? []),
+      ...aliases,
+      "借換",
+      "変動",
+      "表面金利",
+      "適用金利",
+    ],
+  };
+  const extractRates = (snippets) =>
+    snippets
+      .map((snippet) => extractRate(snippet, aggregateSource))
+      .filter((rate) => rate !== null);
+
+  const semanticBlockRates = extractRates(semanticBlockSnippets);
+  if (semanticBlockRates.length > 0) {
+    return Math.min(...semanticBlockRates);
+  }
+
+  const divBlockRates = extractRates(divBlockSnippets);
+  if (divBlockRates.length > 0) {
+    return Math.min(...divBlockRates);
+  }
+
+  const indexedRates = extractRates(indexedSnippets);
+  if (indexedRates.length === 0) {
+    return null;
+  }
+  return Math.min(...indexedRates);
 }
 
 function scoreDiscoveredLink(url, text) {
@@ -422,6 +507,35 @@ async function fetchBankRate(source, fetchedAt) {
     lastMessage = "取得したページ内で住宅ローン変動金利らしい数値を特定できませんでした。";
   }
 
+  for (const sourceUrl of getAggregateRateUrls(source)) {
+    if (!sourceUrl || attemptedUrls.includes(sourceUrl) || attemptedUrls.length >= MAX_URLS_PER_SOURCE) {
+      continue;
+    }
+
+    attemptedUrls.push(sourceUrl);
+    const fetchResult = await fetchHtml(sourceUrl);
+    if (!fetchResult.ok) {
+      lastMessage = fetchResult.message;
+      continue;
+    }
+
+    const rate = extractRateFromAggregate(fetchResult.html, source);
+    if (rate !== null) {
+      return {
+        bankRateSourceId: source.id,
+        bankName: source.bankName,
+        rate,
+        status: "needs-review",
+        fetchedAt,
+        sourceUrl,
+        attemptedUrls,
+        message: `公式ページでは金利を特定できなかったため、総合サイトから${source.bankName}の金利候補を抽出しました。確認URL ${attemptedUrls.length}件。必ず公式条件と照合してください。`,
+      };
+    }
+
+    lastMessage = "総合サイト内でも銀行名と住宅ローン変動金利の組み合わせを特定できませんでした。";
+  }
+
   return {
     bankRateSourceId: source.id,
     bankName: source.bankName,
@@ -430,7 +544,7 @@ async function fetchBankRate(source, fetchedAt) {
     fetchedAt,
     sourceUrl: attemptedUrls[0] ?? getRateUrls(source)[0] ?? "",
     attemptedUrls,
-    message: `複数URL（${attemptedUrls.length}件）を確認しましたが、金利候補を自動抽出できませんでした。${lastMessage} 公式確認と手入力補正を行ってください。`,
+    message: `公式ページと総合サイト（計${attemptedUrls.length}件）を確認しましたが、金利候補を自動抽出できませんでした。${lastMessage} 公式確認と手入力補正を行ってください。`,
   };
 }
 

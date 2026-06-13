@@ -16,16 +16,20 @@
 - [x] 自動取得失敗・未取得・サンプル値だけ・手入力だけの銀行を借換え候補にしないこと
 - [x] 最新取得済み候補がない場合、借換え画面に候補なしの案内を表示すること
 - [x] 金利抽出で `年--%` のプレースホルダーや団信上乗せ率だけを取得成功扱いしないこと
+- [x] 住信SBIネット銀行の取得先に `https://www.netbk.co.jp/contents/lp/homeloan/web/re.html` を含めること
+- [x] 広島銀行の取得先に `https://www.hirogin.co.jp/service/loan/housing-loan/super/` を含めること
+- [x] 公式ページで判断できない場合、モゲチェック・価格.com・ダイヤモンド不動産研究所を総合サイトフォールバックとして確認すること
+- [x] 総合サイト抽出で、実質金利より表面金利・適用金利・変動金利を優先すること
 - [x] ホームの金額非表示時に返済額確認カード内の金額も非表示になること
-- [x] 画面下部に `更新: 2026/06/13 v4` が表示されること
-- [x] Service Workerのキャッシュ名が `mortgage-rate-checker-v4-20260613` であること
+- [x] 画面下部に `更新: 2026/06/13 v5` が表示されること
+- [x] Service Workerのキャッシュ名が `mortgage-rate-checker-v5-20260613` であること
 - [x] 初回設定フォームの保存ボタンが固定フッターに隠れず押せること
 - [x] ルート `npm test`
 - [x] ルート `npx tsc -b`
 - [x] `deliverables/mortgage-rate-checker-github/` 内で `npm test`
 - [x] `deliverables/mortgage-rate-checker-github/` 内で `npx tsc -b`
-- [ ] ルート `npm run build`（OneDrive配下の `dist` 削除で `EPERM`。権限付き再実行は利用制限で不可）
-- [ ] `deliverables/mortgage-rate-checker-github/` 内で `npm run build`（OneDrive配下の `dist` 削除で `EPERM`）
+- [x] ルート `npm run build`（通常実行は `EPERM`、権限付き再実行で成功）
+- [x] `deliverables/mortgage-rate-checker-github/` 内で `npm run build`（通常実行は `EPERM`、権限付き再実行で成功）
 - [ ] ローカルVite画面確認（v4では未実施。Vite/esbuild起動が `EPERM`）
 - [ ] ローカルViteスマホ幅確認（v4では未実施。Vite/esbuild起動が `EPERM`）
 - [ ] 公開URLのv4反映確認（GitHub commit/pushとCloudflare Pages再デプロイ後に実施）
