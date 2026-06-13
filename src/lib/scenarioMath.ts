@@ -74,9 +74,9 @@ export function currentRateNegotiationSummary(
   const difference = calculateRateDifference(currentAppliedRate, lowerRate);
   if (difference > RATE_EQUAL_TOLERANCE) {
     return {
-      title: "金利引き下げ交渉を検討してください",
+      title: "現在金利は下限金利より高いです",
       message:
-        "現在の適用金利は新規向け下限金利を上回っています。返済額通知の内容を確認し、引き下げ交渉または借換え比較を進めてください。",
+        "現在の適用金利は新規向け下限金利を上回っています。この差は金利引き下げ交渉や借換え比較の材料になります。返済額通知の内容と公式金利を確認してください。",
       tone: "amber",
     };
   }
@@ -89,9 +89,9 @@ export function currentRateNegotiationSummary(
     };
   }
   return {
-    title: "現時点では交渉優先度は低めです",
+    title: "現在金利は下限金利より低いです",
     message:
-      "現在の適用金利は新規向け下限金利より低いため、現時点では金利引き下げ交渉の優先度は高くありません。通知後に再確認してください。",
+      "現在の適用金利は新規向け下限金利より低い水準です。金利引き下げ交渉よりも、次回通知や他行条件の変化を確認する位置づけです。",
     tone: "blue",
   };
 }

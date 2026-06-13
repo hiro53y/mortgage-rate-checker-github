@@ -35,6 +35,7 @@ export function getRateStatus(row: BankComparisonRow): NonNullable<BankCompariso
 
 export function isBaseComparisonRow(row: BankComparisonRow): boolean {
   return (
+    row.rowKind === "base" ||
     row.netBenefit === null ||
     row.bankName.includes("選択中シナリオ") ||
     row.bankName.includes("現在条件")
@@ -46,9 +47,19 @@ export function recalculateComparisonRow(
   loan: LoanProfile,
   baseMonthlyPayment = loan.monthlyPayment,
 ): BankComparisonRow {
+  const remainingMonths = Math.max(
+    calculateRemainingMonths(loan.nextPaymentDate, loan.endDate),
+    1,
+  );
+  const remainingBonusPayments = calculateRemainingBonusPayments(
+    loan.nextPaymentDate,
+    loan.endDate,
+    loan.bonusMonths,
+  );
   if (isBaseComparisonRow(row)) {
     return {
       ...row,
+      rowKind: "base",
       bankName: `${loan.bankName}（現在条件）`,
       effectiveRate: loan.currentRate,
       autoFetchedRate: undefined,
@@ -58,16 +69,14 @@ export function recalculateComparisonRow(
       fetchError: undefined,
       insuranceLevel: loan.cancerInsuranceType,
       monthlyPayment: baseMonthlyPayment,
+      bonusPayment: loan.bonusPayment,
+      remainingTotalPayment: calculateCurrentRemainingTotalPayment(loan),
       netBenefit: null,
       isPriorityCandidate: false,
       note: "現在条件の基準",
     };
   }
 
-  const remainingMonths = Math.max(
-    calculateRemainingMonths(loan.nextPaymentDate, loan.endDate),
-    1,
-  );
   const rate = getRateUsedForCalculation(row);
   const monthlyPayment = Math.round(
     calculateEqualPrincipalAndInterestPayment(
@@ -76,13 +85,27 @@ export function recalculateComparisonRow(
       remainingMonths,
     ),
   );
+  const bonusPayment = Math.round(
+    calculateEqualPeriodicPayment(
+      loan.currentBalanceBonus,
+      rate,
+      remainingBonusPayments,
+      2,
+    ),
+  );
+  const remainingTotalPayment = Math.round(
+    monthlyPayment * remainingMonths + bonusPayment * remainingBonusPayments,
+  );
   const netBenefit = Math.round((baseMonthlyPayment - monthlyPayment) * BENEFIT_DISPLAY_MONTHS);
 
   return {
     ...row,
+    rowKind: "candidate",
     rateUsedForCalculation: rate,
     rateStatus: getRateStatus(row),
     monthlyPayment,
+    bonusPayment,
+    remainingTotalPayment,
     netBenefit,
     isPriorityCandidate: netBenefit >= 250000,
   };
@@ -162,18 +185,37 @@ export function buildRefinanceResultFromCurrentLoan(
     calculateRemainingMonths(loan.nextPaymentDate, loan.endDate),
     1,
   );
+  const remainingBonusPayments = calculateRemainingBonusPayments(
+    loan.nextPaymentDate,
+    loan.endDate,
+    loan.bonusMonths,
+  );
   const currentRemainingTotalPayment = calculateCurrentRemainingTotalPayment(loan);
   const monthlyDifference = loan.monthlyPayment - row.monthlyPayment;
+  const candidateBonusPayment =
+    row.bonusPayment ??
+    Math.round(
+      calculateEqualPeriodicPayment(
+        loan.currentBalanceBonus,
+        getRateUsedForCalculation(row),
+        remainingBonusPayments,
+        2,
+      ),
+    );
+  const bonusDifference = loan.bonusPayment - candidateBonusPayment;
   const totalCosts = calculateTotalRefinanceCosts(refinanceCosts);
   const refinanceRemainingTotalPayment = Math.round(
-    currentRemainingTotalPayment - monthlyDifference * remainingMonths,
+    row.monthlyPayment * remainingMonths + candidateBonusPayment * remainingBonusPayments,
   );
+  const totalPaymentDifference =
+    currentRemainingTotalPayment - refinanceRemainingTotalPayment;
   const netBenefit = calculateNetBenefit(
     currentRemainingTotalPayment,
     refinanceRemainingTotalPayment,
     totalCosts,
   );
-  const paybackMonths = calculatePaybackMonths(totalCosts, monthlyDifference);
+  const averageMonthlyDifference = (monthlyDifference * 12 + bonusDifference * 2) / 12;
+  const paybackMonths = calculatePaybackMonths(totalCosts, averageMonthlyDifference);
   const candidateReviewWarning = getCandidateReviewWarning(row);
 
   return {
@@ -181,13 +223,19 @@ export function buildRefinanceResultFromCurrentLoan(
     candidateBankName: row.bankName,
     candidateRate: getRateUsedForCalculation(row),
     baseMonthlyPayment: loan.monthlyPayment,
+    baseBonusPayment: loan.bonusPayment,
+    candidateMonthlyPayment: row.monthlyPayment,
+    candidateBonusPayment,
     candidateNeedsReview: Boolean(candidateReviewWarning),
     candidateReviewWarning,
     currentRemainingTotalPayment,
     refinanceRemainingTotalPayment,
     refinanceCosts: totalCosts,
+    totalPaymentDifference,
     netBenefit,
     monthlyDifference,
+    bonusDifference,
+    averageMonthlyDifference,
     paybackMonths,
     judgement: judgeRefinance(netBenefit, paybackMonths),
   };

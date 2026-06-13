@@ -123,12 +123,16 @@ describe("comparisonMath", () => {
     );
 
     assert.equal(rows[0].bankName, "test（現在条件）");
+    assert.equal(rows[0].rowKind, "base");
     assert.equal(rows[0].rateUsedForCalculation, 1.005);
     assert.equal(rows[0].monthlyPayment, 90916);
+    assert.equal(rows[0].bonusPayment, 114283);
 
     const candidate = selectBestRefinanceCandidate(rows);
     assert.ok(candidate);
     assert.equal(candidate.id, "netbk-row");
+    assert.equal(candidate.rowKind, "candidate");
+    assert.ok((candidate.bonusPayment ?? 0) > 0);
 
     const result = buildRefinanceResultFromCurrentLoan(
       candidate,
@@ -138,6 +142,11 @@ describe("comparisonMath", () => {
     assert.equal(result.candidateBankName, "住信SBIネット銀行");
     assert.equal(result.candidateRate, 0.89);
     assert.equal(result.baseMonthlyPayment, 90916);
+    assert.equal(result.baseBonusPayment, 114283);
+    assert.equal(result.candidateMonthlyPayment, candidate.monthlyPayment);
+    assert.equal(result.candidateBonusPayment, candidate.bonusPayment);
+    assert.equal(result.totalPaymentDifference, result.currentRemainingTotalPayment - result.refinanceRemainingTotalPayment);
+    assert.equal(result.netBenefit, result.totalPaymentDifference - result.refinanceCosts);
     assert.equal(result.candidateNeedsReview, true);
     assert.ok(result.netBenefit > 0);
   });

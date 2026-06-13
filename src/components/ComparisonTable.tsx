@@ -57,7 +57,7 @@ export function ComparisonTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-soft">
-      <table className="min-w-[1180px] text-left text-sm">
+      <table className="min-w-[1320px] text-left text-sm">
         <thead className="bg-slate-50 text-xs text-slate-500">
           <tr>
             <th className="px-3 py-3 font-bold">銀行名</th>
@@ -66,7 +66,8 @@ export function ComparisonTable({
             <th className="px-3 py-3 font-bold">判定使用</th>
             <th className="px-3 py-3 font-bold">保障</th>
             <th className="px-3 py-3 font-bold">月返済</th>
-            <th className="px-3 py-3 font-bold">実質メリット</th>
+            <th className="px-3 py-3 font-bold">ボーナス返済</th>
+            <th className="px-3 py-3 font-bold">12年累計差（月返済分）</th>
             <th className="px-3 py-3 font-bold">公式確認</th>
             <th className="px-3 py-3 font-bold">判定</th>
           </tr>
@@ -129,6 +130,9 @@ export function ComparisonTable({
                 </td>
                 <td className="px-3 py-3 text-slate-700">{row.insuranceLevel}</td>
                 <td className="px-3 py-3 font-bold text-slate-900">{formatMoney(row.monthlyPayment)}</td>
+                <td className="px-3 py-3 font-bold text-slate-900">
+                  {row.bonusPayment !== undefined ? formatMoney(row.bonusPayment) : "未計算"}
+                </td>
                 <td
                   className={`px-3 py-3 font-black ${
                     row.netBenefit === null

@@ -1,5 +1,23 @@
 # テストチェックリスト
 
+## 2026-06-13
+
+- [x] 「交渉優先度は低め」文言が試算画面から消えること
+- [x] 現在金利 1.005% と下限 0.950% の判定が「現在金利は下限金利より高い」になること
+- [x] 試算画面に判定式 `1.005% - 0.950% = +0.055%` が表示されること
+- [x] 比較表の基準が保存済み現在ローン条件であることを表示すること
+- [x] 比較表に月返済とボーナス返済を分けて表示すること
+- [x] 比較表の差額列を「12年累計差（月返済分）」として表示すること
+- [x] 借換え画面に現在/候補の月返済・ボーナス返済・総返済額差・諸費用差引後を表示すること
+- [x] 借換え候補の総返済額でボーナス返済差も再計算すること
+- [x] ルート `npm test`
+- [x] ルート `npx tsc -b`
+- [x] `deliverables/mortgage-rate-checker-github/` 内で `npm test`
+- [x] `deliverables/mortgage-rate-checker-github/` 内で `npx tsc -b`
+- [ ] ルート `npm run build`（Vite/esbuild `spawn EPERM` のため未完了）
+- [ ] `deliverables/mortgage-rate-checker-github/` 内で `npm run build`（同じく `spawn EPERM` のため未完了）
+- [ ] ローカルVite画面確認（同じく `spawn EPERM` のため未完了）
+
 ## 2026-06-12
 
 - [x] 1.005%変更時の試算見出しが交渉検討になること

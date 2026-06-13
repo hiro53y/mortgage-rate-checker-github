@@ -28,7 +28,7 @@ export function ScenarioPage({
   return (
     <div className="space-y-4">
       <header>
-        <p className="text-xs font-bold text-navy-700">金利変更シナリオ</p>
+        <p className="text-xs font-bold text-navy-700">現在金利の判定</p>
         <h1 className="mt-1 text-2xl font-black tracking-normal text-slate-950">
           {summary.title}
         </h1>
@@ -44,12 +44,19 @@ export function ScenarioPage({
           />
           <InfoRow label="差（現在 - 下限金利）" value={formatSignedRate(rateDifference)} />
         </dl>
+        <p className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-navy-800">
+          判定式: {formatRate(loan.currentRate)} - {formatRate(MOMIJI_LOWER_RATE)} ={" "}
+          {formatSignedRate(rateDifference)}
+        </p>
         <p className="rounded-lg bg-white px-3 py-3 text-sm leading-6 text-slate-700">
           {summary.message}
         </p>
       </Card>
 
-      <SectionTitle title="金利変更シナリオ" subtitle="表示額は登録済み条件に基づく概算です。" />
+      <SectionTitle
+        title="将来シナリオ別試算"
+        subtitle="表示額は保存済みの現在ローン条件から再計算した概算です。"
+      />
 
       <div className="space-y-3">
         {scenarios.map((scenario) => (

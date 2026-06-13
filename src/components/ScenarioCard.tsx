@@ -1,7 +1,7 @@
 import { AlertTriangle, TrendingUp } from "lucide-react";
 import type { ScenarioRate } from "../types";
 import { formatApproxMoney, formatApproxSignedMoney, formatRate } from "../lib/formatters";
-import { areRatesEqual, scenarioJudgementText } from "../lib/scenarioMath";
+import { areRatesEqual, scenarioJudgementText, shouldSuggestNegotiation } from "../lib/scenarioMath";
 import { Card } from "./Card";
 import { InfoRow } from "./InfoRow";
 import { RateBadge } from "./RateBadge";
@@ -13,7 +13,7 @@ type ScenarioCardProps = {
 };
 
 export function ScenarioCard({ scenario, lowerRate, currentRate }: ScenarioCardProps) {
-  const suggestNegotiation = scenario.shouldSuggestNegotiation;
+  const suggestNegotiation = shouldSuggestNegotiation(scenario.rate, lowerRate);
   const matchesCurrentRate = areRatesEqual(scenario.rate, currentRate);
   const isLowerThanCurrent = scenario.rate < currentRate && !matchesCurrentRate;
   const tone = suggestNegotiation ? "amber" : isLowerThanCurrent ? "green" : "default";
@@ -26,7 +26,9 @@ export function ScenarioCard({ scenario, lowerRate, currentRate }: ScenarioCardP
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-slate-950">{scenario.name}</h3>
-          <p className="mt-1 text-xs text-slate-500">{scenario.memo}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            シナリオ金利: {formatRate(scenario.rate)} / {scenario.memo}
+          </p>
         </div>
         <RateBadge value={scenario.rate} tone={suggestNegotiation ? "amber" : "blue"} />
       </div>

@@ -109,13 +109,6 @@ export default function App() {
     };
   }, []);
 
-  const selectedScenario = useMemo(
-    () =>
-      appData.scenarios.find((scenario) => scenario.id === "scenario-b") ??
-      appData.scenarios[0] ??
-      createSampleAppStorage().scenarios[1],
-    [appData.scenarios],
-  );
   const paymentWarning = useMemo(
     () => getLoanPaymentStalenessWarning(appData.loanProfile),
     [appData.loanProfile],
@@ -194,11 +187,6 @@ export default function App() {
     setAppData(createSampleAppStorage());
     setIsConfigured(false);
     setActiveView("setup");
-  };
-
-  const saveRefinanceCandidate = () => {
-    window.alert("この候補を保存しました。v1では現在の端末内データとして保持します。");
-    persist({ ...appData }, true);
   };
 
   const applyFetchedRates = useCallback(
@@ -392,9 +380,9 @@ export default function App() {
           <RefinanceBenefitPage
             result={appData.refinanceResult}
             costBreakdown={appData.refinanceCostBreakdown}
+            loan={appData.loanProfile}
             paymentWarning={paymentWarning}
             onBack={() => setActiveView("comparison")}
-            onSaveCandidate={saveRefinanceCandidate}
           />
         );
       case "settings":

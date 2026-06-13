@@ -91,9 +91,9 @@ describe("scenarioMath", () => {
   });
 
   it("returns current-rate negotiation messages by rate difference", () => {
-    assert.match(currentRateNegotiationSummary(1.005, 0.95).title, /交渉/);
+    assert.match(currentRateNegotiationSummary(1.005, 0.95).title, /高い/);
     assert.match(currentRateNegotiationSummary(0.95, 0.95).title, /同水準/);
-    assert.match(currentRateNegotiationSummary(0.755, 0.95).title, /低め/);
+    assert.match(currentRateNegotiationSummary(0.755, 0.95).title, /低い/);
   });
 
   it("derives same-rate scenario from current manual payment and makes annual difference zero", () => {

@@ -64,6 +64,7 @@ export const defaultScenarios: ScenarioRate[] = [
 export const defaultComparisonRows: BankComparisonRow[] = [
   {
     id: "momiji-scenario",
+    rowKind: "base",
     bankName: "もみじ銀行（現在条件）",
     effectiveRate: 0.755,
     rateUsedForCalculation: 0.755,
@@ -76,6 +77,7 @@ export const defaultComparisonRows: BankComparisonRow[] = [
   },
   {
     id: "mufg-row",
+    rowKind: "candidate",
     bankName: "三菱UFJ銀行",
     effectiveRate: 0.995,
     rateUsedForCalculation: 0.995,
@@ -88,6 +90,7 @@ export const defaultComparisonRows: BankComparisonRow[] = [
   },
   {
     id: "netbk-row",
+    rowKind: "candidate",
     bankName: "住信SBIネット銀行",
     effectiveRate: 0.89,
     rateUsedForCalculation: 0.89,
@@ -100,6 +103,7 @@ export const defaultComparisonRows: BankComparisonRow[] = [
   },
   {
     id: "hirogin-row",
+    rowKind: "candidate",
     bankName: "広島銀行",
     effectiveRate: 1.02,
     rateUsedForCalculation: 1.02,
@@ -112,6 +116,7 @@ export const defaultComparisonRows: BankComparisonRow[] = [
   },
   {
     id: "chugin-row",
+    rowKind: "candidate",
     bankName: "中国銀行",
     effectiveRate: 0.95,
     rateUsedForCalculation: 0.95,
@@ -129,14 +134,20 @@ export const defaultRefinanceResult: RefinanceResult = {
   candidateBankName: "住信SBIネット銀行",
   candidateRate: 0.89,
   baseMonthlyPayment: 86689,
+  baseBonusPayment: 108879,
+  candidateMonthlyPayment: 88955,
+  candidateBonusPayment: 111700,
   candidateNeedsReview: true,
   candidateReviewWarning:
     "公式確認が未完了、保障条件に要確認項目ありです。公式ページと手入力補正で条件を確認してください。",
   currentRemainingTotalPayment: 58420000,
   refinanceRemainingTotalPayment: 56980000,
   refinanceCosts: 820000,
+  totalPaymentDifference: 1440000,
   netBenefit: 620000,
   monthlyDifference: 3900,
+  bonusDifference: 5200,
+  averageMonthlyDifference: 4767,
   paybackMonths: 210,
   judgement: "検討価値あり",
 };

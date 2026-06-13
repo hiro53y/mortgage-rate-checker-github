@@ -58,6 +58,7 @@ export type BankRateSource = {
 
 export type BankComparisonRow = {
   id: string;
+  rowKind?: "base" | "candidate";
   bankName: string;
   effectiveRate: number;
   autoFetchedRate?: number;
@@ -70,6 +71,8 @@ export type BankComparisonRow = {
   fetchError?: string;
   insuranceLevel: string;
   monthlyPayment: number;
+  bonusPayment?: number;
+  remainingTotalPayment?: number;
   netBenefit: number | null;
   isPriorityCandidate: boolean;
   note: string;
@@ -80,13 +83,19 @@ export type RefinanceResult = {
   candidateBankName: string;
   candidateRate: number;
   baseMonthlyPayment: number;
+  baseBonusPayment: number;
+  candidateMonthlyPayment: number;
+  candidateBonusPayment: number;
   candidateNeedsReview: boolean;
   candidateReviewWarning?: string;
   currentRemainingTotalPayment: number;
   refinanceRemainingTotalPayment: number;
   refinanceCosts: number;
+  totalPaymentDifference: number;
   netBenefit: number;
   monthlyDifference: number;
+  bonusDifference: number;
+  averageMonthlyDifference: number;
   paybackMonths: number | null;
   judgement: "検討価値あり" | "微妙" | "メリット小";
 };

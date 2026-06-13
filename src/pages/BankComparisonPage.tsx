@@ -2,8 +2,10 @@ import { Calculator, RefreshCw } from "lucide-react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ComparisonTable } from "../components/ComparisonTable";
+import { InfoRow } from "../components/InfoRow";
 import { SectionTitle } from "../components/SectionTitle";
 import { formatDateTimeJa, formatMoney, formatRate } from "../lib/formatters";
+import { calculateRemainingMonths } from "../lib/mortgageMath";
 import type { BankComparisonRow, BankRateSource, LoanProfile } from "../types";
 
 type BankComparisonPageProps = {
@@ -37,6 +39,8 @@ export function BankComparisonPage({
   onRecalculateRow,
   onRefinance,
 }: BankComparisonPageProps) {
+  const remainingMonths = calculateRemainingMonths(loan.nextPaymentDate, loan.endDate);
+
   return (
     <div className="space-y-4">
       <header>
@@ -45,12 +49,17 @@ export function BankComparisonPage({
       </header>
 
       <Card tone="blue" className="space-y-2">
-        <SectionTitle title="比較条件" />
-        <p className="text-sm font-bold text-slate-800">
-          現在条件 {formatRate(loan.currentRate)} / 登録月返済 {formatMoney(loan.monthlyPayment)} / がん団信込み
-        </p>
+        <SectionTitle title="比較の基準" />
+        <dl>
+          <InfoRow label="比較元" value={`${loan.bankName} 現在条件`} emphasis />
+          <InfoRow label="現在適用金利" value={formatRate(loan.currentRate)} />
+          <InfoRow label="現在の月返済" value={formatMoney(loan.monthlyPayment)} />
+          <InfoRow label="現在のボーナス返済" value={formatMoney(loan.bonusPayment)} />
+          <InfoRow label="残期間" value={`${remainingMonths}か月`} />
+          <InfoRow label="表の差額期間" value="144か月（12年）" />
+        </dl>
         <p className="text-xs text-slate-500">
-          実質メリットは現在条件との差額を概算表示します。自動取得値は誤取得の可能性があるため、公式確認と手入力補正を優先してください。
+          各銀行候補は、同じ残高・残期間で月返済とボーナス返済を概算します。表の差額は「12年分の月返済差額」の目安で、借換え画面では残期間全体と諸費用を含めて再計算します。
         </p>
       </Card>
 
@@ -94,7 +103,7 @@ export function BankComparisonPage({
       />
 
       <p className="text-xs leading-5 text-slate-500">
-        実質メリットは、現在条件との差額を12年分の目安で表示しています。手入力補正がある場合は手入力値を優先して概算再判定します。
+        12年差額目安 = （現在の月返済 - 候補の月返済）× 144か月。手入力補正がある場合は手入力値を優先して概算再判定します。
       </p>
 
       <Button fullWidth onClick={onRefinance}>
