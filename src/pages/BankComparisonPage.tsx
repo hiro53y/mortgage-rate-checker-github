@@ -3,16 +3,21 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { ComparisonTable } from "../components/ComparisonTable";
 import { InfoRow } from "../components/InfoRow";
+import { PaymentBasisNotice } from "../components/PaymentBasisNotice";
 import { SectionTitle } from "../components/SectionTitle";
 import { formatDateTimeJa, formatMoney, formatRate } from "../lib/formatters";
-import { calculateRemainingMonths } from "../lib/mortgageMath";
-import type { BankComparisonRow, BankRateSource, LoanProfile } from "../types";
+import type {
+  BankComparisonRow,
+  BankRateSource,
+  LoanPaymentBasisStatus,
+  LoanProfile,
+} from "../types";
 
 type BankComparisonPageProps = {
   rows: BankComparisonRow[];
   sources: BankRateSource[];
   loan: LoanProfile;
-  paymentWarning: string | null;
+  paymentBasis: LoanPaymentBasisStatus;
   rateFetchState?: {
     checkedMonth?: string;
     lastAttemptAt?: string;
@@ -31,7 +36,7 @@ export function BankComparisonPage({
   rows,
   sources,
   loan,
-  paymentWarning,
+  paymentBasis,
   rateFetchState,
   isFetchingRates,
   onOpenBank,
@@ -39,8 +44,6 @@ export function BankComparisonPage({
   onRecalculateRow,
   onRefinance,
 }: BankComparisonPageProps) {
-  const remainingMonths = calculateRemainingMonths(loan.nextPaymentDate, loan.endDate);
-
   return (
     <div className="space-y-4">
       <header>
@@ -53,23 +56,24 @@ export function BankComparisonPage({
         <dl>
           <InfoRow label="比較元" value={`${loan.bankName} 現在条件`} emphasis />
           <InfoRow label="現在適用金利" value={formatRate(loan.currentRate)} />
-          <InfoRow label="現在の月返済" value={formatMoney(loan.monthlyPayment)} />
-          <InfoRow label="現在のボーナス返済" value={formatMoney(loan.bonusPayment)} />
-          <InfoRow label="残期間" value={`${remainingMonths}か月`} />
+          <InfoRow label="比較用の月返済" value={formatMoney(paymentBasis.baselineMonthlyPayment)} />
+          <InfoRow
+            label="比較用のボーナス返済"
+            value={formatMoney(paymentBasis.baselineBonusPayment)}
+          />
+          <InfoRow label="登録済み月返済" value={formatMoney(loan.monthlyPayment)} />
+          {paymentBasis.isNextPaymentDatePast ? (
+            <InfoRow label="試算用の次回返済日" value={paymentBasis.effectiveNextPaymentDate} />
+          ) : null}
+          <InfoRow label="残期間" value={`${paymentBasis.remainingMonths}か月`} />
           <InfoRow label="表の差額期間" value="144か月（12年）" />
         </dl>
         <p className="text-xs text-slate-500">
-          各銀行候補は、同じ残高・残期間で月返済とボーナス返済を概算します。表の差額は「12年分の月返済差額」の目安で、借換え画面では残期間全体と諸費用を含めて再計算します。
+          各銀行候補は、同じ残高・残期間で月返済とボーナス返済を概算します。表の差額は「比較用の月返済」と候補月返済の12年差額目安で、借換え画面では残期間全体と諸費用を含めて再計算します。
         </p>
       </Card>
 
-      {paymentWarning ? (
-        <Card tone="amber">
-          <p className="text-sm font-semibold leading-6 text-amber-900">
-            {paymentWarning}
-          </p>
-        </Card>
-      ) : null}
+      <PaymentBasisNotice loan={loan} paymentBasis={paymentBasis} />
 
       <Card className="space-y-3">
         <div className="flex items-start justify-between gap-3">
@@ -103,7 +107,7 @@ export function BankComparisonPage({
       />
 
       <p className="text-xs leading-5 text-slate-500">
-        12年差額目安 = （現在の月返済 - 候補の月返済）× 144か月。手入力補正がある場合は手入力値を優先して概算再判定します。
+        12年差額目安 = （比較用の月返済 - 候補の月返済）× 144か月。手入力補正がある場合は手入力値を優先して概算再判定します。
       </p>
 
       <Button fullWidth onClick={onRefinance}>

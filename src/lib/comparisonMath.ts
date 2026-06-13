@@ -1,5 +1,6 @@
 import type {
   BankComparisonRow,
+  LoanPaymentBasisStatus,
   LoanProfile,
   RefinanceCostBreakdown,
   RefinanceResult,
@@ -7,6 +8,8 @@ import type {
 import {
   calculateEqualPeriodicPayment,
   calculateEqualPrincipalAndInterestPayment,
+  getEffectiveNextPaymentDate,
+  getLocalTodayIsoDate,
   calculateRemainingBonusPayments,
   calculateRemainingMonths,
 } from "./mortgageMath.ts";
@@ -45,17 +48,10 @@ export function isBaseComparisonRow(row: BankComparisonRow): boolean {
 export function recalculateComparisonRow(
   row: BankComparisonRow,
   loan: LoanProfile,
-  baseMonthlyPayment = loan.monthlyPayment,
+  paymentBasis = getLoanPaymentBasisStatus(loan),
 ): BankComparisonRow {
-  const remainingMonths = Math.max(
-    calculateRemainingMonths(loan.nextPaymentDate, loan.endDate),
-    1,
-  );
-  const remainingBonusPayments = calculateRemainingBonusPayments(
-    loan.nextPaymentDate,
-    loan.endDate,
-    loan.bonusMonths,
-  );
+  const remainingMonths = Math.max(paymentBasis.remainingMonths, 1);
+  const remainingBonusPayments = paymentBasis.remainingBonusPayments;
   if (isBaseComparisonRow(row)) {
     return {
       ...row,
@@ -68,12 +64,17 @@ export function recalculateComparisonRow(
       rateStatus: "sample",
       fetchError: undefined,
       insuranceLevel: loan.cancerInsuranceType,
-      monthlyPayment: baseMonthlyPayment,
-      bonusPayment: loan.bonusPayment,
-      remainingTotalPayment: calculateCurrentRemainingTotalPayment(loan),
+      monthlyPayment: paymentBasis.baselineMonthlyPayment,
+      bonusPayment: paymentBasis.baselineBonusPayment,
+      remainingTotalPayment: Math.round(
+        paymentBasis.baselineMonthlyPayment * remainingMonths +
+          paymentBasis.baselineBonusPayment * remainingBonusPayments,
+      ),
       netBenefit: null,
       isPriorityCandidate: false,
-      note: "現在条件の基準",
+      note: paymentBasis.usesCalculatedBaseline
+        ? "現在金利から逆算した比較用の基準"
+        : "現在条件の基準",
     };
   }
 
@@ -96,7 +97,9 @@ export function recalculateComparisonRow(
   const remainingTotalPayment = Math.round(
     monthlyPayment * remainingMonths + bonusPayment * remainingBonusPayments,
   );
-  const netBenefit = Math.round((baseMonthlyPayment - monthlyPayment) * BENEFIT_DISPLAY_MONTHS);
+  const netBenefit = Math.round(
+    (paymentBasis.baselineMonthlyPayment - monthlyPayment) * BENEFIT_DISPLAY_MONTHS,
+  );
 
   return {
     ...row,
@@ -114,9 +117,9 @@ export function recalculateComparisonRow(
 export function recalculateComparisonRows(
   rows: BankComparisonRow[],
   loan: LoanProfile,
-  baseMonthlyPayment = loan.monthlyPayment,
+  paymentBasis = getLoanPaymentBasisStatus(loan),
 ): BankComparisonRow[] {
-  return rows.map((row) => recalculateComparisonRow(row, loan, baseMonthlyPayment));
+  return rows.map((row) => recalculateComparisonRow(row, loan, paymentBasis));
 }
 
 function calculateTotalRefinanceCosts(refinanceCosts: RefinanceCostBreakdown): number {
@@ -129,34 +132,48 @@ function calculateTotalRefinanceCosts(refinanceCosts: RefinanceCostBreakdown): n
   );
 }
 
-export function calculateCurrentRemainingTotalPayment(loan: LoanProfile): number {
-  const remainingMonths = Math.max(
-    calculateRemainingMonths(loan.nextPaymentDate, loan.endDate),
-    1,
-  );
-  const remainingBonusPayments = calculateRemainingBonusPayments(
-    loan.nextPaymentDate,
-    loan.endDate,
-    loan.bonusMonths,
-  );
+export function calculateCurrentRemainingTotalPayment(
+  loan: LoanProfile,
+  todayIsoDate?: string,
+): number {
+  const paymentBasis = getLoanPaymentBasisStatus(loan, todayIsoDate);
   return Math.round(
-    loan.monthlyPayment * remainingMonths + loan.bonusPayment * remainingBonusPayments,
+    paymentBasis.baselineMonthlyPayment * paymentBasis.remainingMonths +
+      paymentBasis.baselineBonusPayment * paymentBasis.remainingBonusPayments,
   );
 }
 
 export function deriveComparisonRowsFromLoan(
   rows: BankComparisonRow[],
   loan: LoanProfile,
+  todayIsoDate?: string,
 ): BankComparisonRow[] {
-  return recalculateComparisonRows(rows, loan, loan.monthlyPayment);
+  return recalculateComparisonRows(rows, loan, getLoanPaymentBasisStatus(loan, todayIsoDate));
 }
 
 export function selectBestRefinanceCandidate(
   rows: BankComparisonRow[],
+  refinanceCosts?: RefinanceCostBreakdown,
+  loan?: LoanProfile,
+  todayIsoDate?: string,
 ): BankComparisonRow | null {
-  return rows
-    .filter((row) => !isBaseComparisonRow(row) && row.netBenefit !== null)
-    .sort((a, b) => (b.netBenefit ?? -Infinity) - (a.netBenefit ?? -Infinity))[0] ?? null;
+  const candidates = rows.filter((row) => !isBaseComparisonRow(row) && row.netBenefit !== null);
+  if (refinanceCosts && loan) {
+    return (
+      candidates
+        .map((row) => ({
+          row,
+          netBenefit: buildRefinanceResultFromCurrentLoan(
+            row,
+            refinanceCosts,
+            loan,
+            todayIsoDate,
+          ).netBenefit,
+        }))
+        .sort((a, b) => b.netBenefit - a.netBenefit)[0]?.row ?? null
+    );
+  }
+  return candidates.sort((a, b) => (b.netBenefit ?? -Infinity) - (a.netBenefit ?? -Infinity))[0] ?? null;
 }
 
 function getCandidateReviewWarning(row: BankComparisonRow): string | undefined {
@@ -180,18 +197,13 @@ export function buildRefinanceResultFromCurrentLoan(
   row: BankComparisonRow,
   refinanceCosts: RefinanceCostBreakdown,
   loan: LoanProfile,
+  todayIsoDate?: string,
 ): RefinanceResult {
-  const remainingMonths = Math.max(
-    calculateRemainingMonths(loan.nextPaymentDate, loan.endDate),
-    1,
-  );
-  const remainingBonusPayments = calculateRemainingBonusPayments(
-    loan.nextPaymentDate,
-    loan.endDate,
-    loan.bonusMonths,
-  );
-  const currentRemainingTotalPayment = calculateCurrentRemainingTotalPayment(loan);
-  const monthlyDifference = loan.monthlyPayment - row.monthlyPayment;
+  const paymentBasis = getLoanPaymentBasisStatus(loan, todayIsoDate);
+  const remainingMonths = Math.max(paymentBasis.remainingMonths, 1);
+  const remainingBonusPayments = paymentBasis.remainingBonusPayments;
+  const currentRemainingTotalPayment = calculateCurrentRemainingTotalPayment(loan, todayIsoDate);
+  const monthlyDifference = paymentBasis.baselineMonthlyPayment - row.monthlyPayment;
   const candidateBonusPayment =
     row.bonusPayment ??
     Math.round(
@@ -202,7 +214,7 @@ export function buildRefinanceResultFromCurrentLoan(
         2,
       ),
     );
-  const bonusDifference = loan.bonusPayment - candidateBonusPayment;
+  const bonusDifference = paymentBasis.baselineBonusPayment - candidateBonusPayment;
   const totalCosts = calculateTotalRefinanceCosts(refinanceCosts);
   const refinanceRemainingTotalPayment = Math.round(
     row.monthlyPayment * remainingMonths + candidateBonusPayment * remainingBonusPayments,
@@ -222,8 +234,8 @@ export function buildRefinanceResultFromCurrentLoan(
     bankRateId: row.id,
     candidateBankName: row.bankName,
     candidateRate: getRateUsedForCalculation(row),
-    baseMonthlyPayment: loan.monthlyPayment,
-    baseBonusPayment: loan.bonusPayment,
+    baseMonthlyPayment: paymentBasis.baselineMonthlyPayment,
+    baseBonusPayment: paymentBasis.baselineBonusPayment,
     candidateMonthlyPayment: row.monthlyPayment,
     candidateBonusPayment,
     candidateNeedsReview: Boolean(candidateReviewWarning),
@@ -252,10 +264,36 @@ export function buildRefinanceResultFromComparisonRow(
 }
 
 export function getLoanPaymentStalenessWarning(loan: LoanProfile): string | null {
-  const remainingMonths = calculateRemainingMonths(loan.nextPaymentDate, loan.endDate);
-  if (remainingMonths <= 0) {
+  const paymentBasis = getLoanPaymentBasisStatus(loan);
+  if (!paymentBasis.hasPaymentGap && !paymentBasis.isNextPaymentDatePast) {
     return null;
   }
+  const warnings = ["返済額の登録確認が必要です。"];
+  if (paymentBasis.hasPaymentGap) {
+    warnings.push(
+      `登録済み返済額と、現在適用金利 ${loan.currentRate.toFixed(3)}% から逆算した概算額に差があります。`,
+    );
+  }
+  if (paymentBasis.isNextPaymentDatePast) {
+    warnings.push("次回返済日が過去日のため、残高・次回返済日・返済予定額を更新してください。");
+  }
+  return warnings.join("");
+}
+
+export function getLoanPaymentBasisStatus(
+  loan: LoanProfile,
+  todayIsoDate = getLocalTodayIsoDate(),
+): LoanPaymentBasisStatus {
+  const effectiveNextPaymentDate = getEffectiveNextPaymentDate(loan.nextPaymentDate, todayIsoDate);
+  const remainingMonths = Math.max(
+    calculateRemainingMonths(effectiveNextPaymentDate, loan.endDate),
+    1,
+  );
+  const remainingBonusPayments = calculateRemainingBonusPayments(
+    effectiveNextPaymentDate,
+    loan.endDate,
+    loan.bonusMonths,
+  );
 
   const expectedMonthlyPayment = Math.round(
     calculateEqualPrincipalAndInterestPayment(
@@ -263,11 +301,6 @@ export function getLoanPaymentStalenessWarning(loan: LoanProfile): string | null
       loan.currentRate,
       remainingMonths,
     ),
-  );
-  const remainingBonusPayments = calculateRemainingBonusPayments(
-    loan.nextPaymentDate,
-    loan.endDate,
-    loan.bonusMonths,
   );
   const expectedBonusPayment = Math.round(
     calculateEqualPeriodicPayment(
@@ -281,24 +314,26 @@ export function getLoanPaymentStalenessWarning(loan: LoanProfile): string | null
   const monthlyDiff = Math.abs(expectedMonthlyPayment - loan.monthlyPayment);
   const bonusDiff =
     remainingBonusPayments > 0 ? Math.abs(expectedBonusPayment - loan.bonusPayment) : 0;
-  if (
-    monthlyDiff <= PAYMENT_STALENESS_THRESHOLD_YEN &&
-    bonusDiff <= PAYMENT_STALENESS_THRESHOLD_YEN
-  ) {
-    return null;
-  }
+  const hasPaymentGap =
+    monthlyDiff > PAYMENT_STALENESS_THRESHOLD_YEN ||
+    bonusDiff > PAYMENT_STALENESS_THRESHOLD_YEN;
+  const usesCalculatedBaseline = hasPaymentGap;
 
-  const warnings = [`現在適用金利 ${loan.currentRate.toFixed(3)}% から逆算した概算返済額と、登録済み返済額に差があります。`];
-  if (monthlyDiff > PAYMENT_STALENESS_THRESHOLD_YEN) {
-    warnings.push(
-      `毎月返済額は概算 ${Math.round(expectedMonthlyPayment).toLocaleString("ja-JP")}円に対して登録 ${loan.monthlyPayment.toLocaleString("ja-JP")}円です。`,
-    );
-  }
-  if (bonusDiff > PAYMENT_STALENESS_THRESHOLD_YEN) {
-    warnings.push(
-      `ボーナス返済額は概算 ${Math.round(expectedBonusPayment).toLocaleString("ja-JP")}円に対して登録 ${loan.bonusPayment.toLocaleString("ja-JP")}円です。`,
-    );
-  }
-  warnings.push("銀行通知額が確定している場合は、マイローン設定で返済額を手入力してください。");
-  return warnings.join("");
+  return {
+    registeredMonthlyPayment: loan.monthlyPayment,
+    registeredBonusPayment: loan.bonusPayment,
+    calculatedMonthlyPayment: expectedMonthlyPayment,
+    calculatedBonusPayment: expectedBonusPayment,
+    baselineMonthlyPayment: usesCalculatedBaseline ? expectedMonthlyPayment : loan.monthlyPayment,
+    baselineBonusPayment: usesCalculatedBaseline ? expectedBonusPayment : loan.bonusPayment,
+    monthlyDifference: expectedMonthlyPayment - loan.monthlyPayment,
+    bonusDifference: expectedBonusPayment - loan.bonusPayment,
+    effectiveNextPaymentDate,
+    remainingMonths,
+    remainingBonusPayments,
+    usesCalculatedBaseline,
+    hasPaymentGap,
+    isNextPaymentDatePast: effectiveNextPaymentDate !== loan.nextPaymentDate,
+    todayIsoDate,
+  };
 }

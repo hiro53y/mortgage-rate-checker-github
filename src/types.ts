@@ -30,6 +30,24 @@ export type LoanProfile = {
   updatedAt: string;
 };
 
+export type LoanPaymentBasisStatus = {
+  registeredMonthlyPayment: number;
+  registeredBonusPayment: number;
+  calculatedMonthlyPayment: number;
+  calculatedBonusPayment: number;
+  baselineMonthlyPayment: number;
+  baselineBonusPayment: number;
+  monthlyDifference: number;
+  bonusDifference: number;
+  effectiveNextPaymentDate: string;
+  remainingMonths: number;
+  remainingBonusPayments: number;
+  usesCalculatedBaseline: boolean;
+  hasPaymentGap: boolean;
+  isNextPaymentDatePast: boolean;
+  todayIsoDate: string;
+};
+
 export type ScenarioRate = {
   id: string;
   name: string;

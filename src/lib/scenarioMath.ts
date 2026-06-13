@@ -2,6 +2,8 @@ import type { LoanProfile, ScenarioRate } from "../types";
 import {
   calculateEqualPeriodicPayment,
   calculateEqualPrincipalAndInterestPayment,
+  getEffectiveNextPaymentDate,
+  getLocalTodayIsoDate,
   calculateRemainingBonusPayments,
   calculateRemainingMonths,
 } from "./mortgageMath.ts";
@@ -100,24 +102,15 @@ export function deriveScenarioFromLoan(
   scenario: ScenarioRate,
   loan: LoanProfile,
   lowerRate: number,
+  todayIsoDate = getLocalTodayIsoDate(),
 ): ScenarioRate {
-  if (areRatesEqual(scenario.rate, loan.currentRate)) {
-    return {
-      ...scenario,
-      monthlyPayment: loan.monthlyPayment,
-      bonusPayment: loan.bonusPayment,
-      annualIncrease: 0,
-      shouldSuggestNegotiation: shouldSuggestNegotiation(scenario.rate, lowerRate),
-      note: scenarioJudgementText(scenario.rate, lowerRate, loan.currentRate),
-    };
-  }
-
+  const effectiveNextPaymentDate = getEffectiveNextPaymentDate(loan.nextPaymentDate, todayIsoDate);
   const remainingMonths = Math.max(
-    calculateRemainingMonths(loan.nextPaymentDate, loan.endDate),
+    calculateRemainingMonths(effectiveNextPaymentDate, loan.endDate),
     1,
   );
   const remainingBonusPayments = calculateRemainingBonusPayments(
-    loan.nextPaymentDate,
+    effectiveNextPaymentDate,
     loan.endDate,
     loan.bonusMonths,
   );
@@ -136,6 +129,21 @@ export function deriveScenarioFromLoan(
       2,
     ),
   );
+  const currentRateMonthlyPayment = Math.round(
+    calculateEqualPrincipalAndInterestPayment(
+      loan.currentBalanceMonthly,
+      loan.currentRate,
+      remainingMonths,
+    ),
+  );
+  const currentRateBonusPayment = Math.round(
+    calculateEqualPeriodicPayment(
+      loan.currentBalanceBonus,
+      loan.currentRate,
+      remainingBonusPayments,
+      2,
+    ),
+  );
 
   return {
     ...scenario,
@@ -143,9 +151,9 @@ export function deriveScenarioFromLoan(
     bonusPayment,
     annualIncrease: calculateAnnualIncrease(
       monthlyPayment,
-      loan.monthlyPayment,
+      currentRateMonthlyPayment,
       bonusPayment,
-      loan.bonusPayment,
+      currentRateBonusPayment,
     ),
     shouldSuggestNegotiation: shouldSuggestNegotiation(scenario.rate, lowerRate),
     note: scenarioJudgementText(scenario.rate, lowerRate, loan.currentRate),
@@ -156,6 +164,9 @@ export function deriveScenariosFromLoan(
   scenarios: ScenarioRate[],
   loan: LoanProfile,
   lowerRate: number,
+  todayIsoDate = getLocalTodayIsoDate(),
 ): ScenarioRate[] {
-  return scenarios.map((scenario) => deriveScenarioFromLoan(scenario, loan, lowerRate));
+  return scenarios.map((scenario) =>
+    deriveScenarioFromLoan(scenario, loan, lowerRate, todayIsoDate),
+  );
 }

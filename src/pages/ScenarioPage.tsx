@@ -55,7 +55,7 @@ export function ScenarioPage({
 
       <SectionTitle
         title="将来シナリオ別試算"
-        subtitle="表示額は保存済みの現在ローン条件から再計算した概算です。"
+        subtitle={`表示額は同じ残高・残期間で再計算した概算です。差額は現在金利${formatRate(loan.currentRate)}相当の概算返済額との比較です。`}
       />
 
       <div className="space-y-3">

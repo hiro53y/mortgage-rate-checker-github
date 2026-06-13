@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { InfoRow } from "../components/InfoRow";
+import { PaymentBasisNotice } from "../components/PaymentBasisNotice";
 import { RateBadge } from "../components/RateBadge";
 import { SectionTitle } from "../components/SectionTitle";
 import {
@@ -14,11 +15,11 @@ import {
 } from "../lib/formatters";
 import { MOMIJI_LOWER_RATE } from "../lib/sampleData";
 import { calculateRateDifference } from "../lib/scenarioMath";
-import type { LoanProfile } from "../types";
+import type { LoanPaymentBasisStatus, LoanProfile } from "../types";
 
 type HomePageProps = {
   loan: LoanProfile;
-  paymentWarning: string | null;
+  paymentBasis: LoanPaymentBasisStatus;
   lastCheckedAt?: string;
   onCheckLatest: () => void;
   onScenario: () => void;
@@ -28,7 +29,7 @@ type HomePageProps = {
 
 export function HomePage({
   loan,
-  paymentWarning,
+  paymentBasis,
   lastCheckedAt,
   onCheckLatest,
   onScenario,
@@ -115,13 +116,7 @@ export function HomePage({
         </div>
       </div>
 
-      {paymentWarning ? (
-        <Card tone="amber">
-          <p className="text-sm font-semibold leading-6 text-amber-900">
-            {paymentWarning}
-          </p>
-        </Card>
-      ) : null}
+      <PaymentBasisNotice loan={loan} paymentBasis={paymentBasis} formatAmount={moneyText} />
 
       <div className="space-y-3">
         <Button fullWidth onClick={onCheckLatest}>

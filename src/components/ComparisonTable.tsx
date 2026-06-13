@@ -4,6 +4,7 @@ import type { BankComparisonRow, BankRateSource } from "../types";
 import { formatDateTimeJa, formatManYen, formatMoney, formatRate } from "../lib/formatters";
 import { getRateStatus, getRateUsedForCalculation } from "../lib/comparisonMath";
 import { Button } from "./Button";
+import { InfoRow } from "./InfoRow";
 
 type ComparisonTableProps = {
   rows: BankComparisonRow[];
@@ -56,8 +57,113 @@ export function ComparisonTable({
   };
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-soft">
-      <table className="min-w-[1320px] text-left text-sm">
+    <div className="space-y-3">
+      <div className="space-y-3 md:hidden">
+        {rows.map((row) => {
+          const source = findSource(row);
+          const status = getRateStatus(row);
+          const usedRate = getRateUsedForCalculation(row);
+          return (
+            <div
+              key={row.id}
+              className={`rounded-lg border p-3 shadow-soft ${
+                row.isPriorityCandidate
+                  ? "border-navy-100 bg-navy-50"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    {row.isPriorityCandidate ? (
+                      <Star className="h-4 w-4 fill-navy-700 text-navy-700" aria-hidden="true" />
+                    ) : null}
+                    <h3 className="text-sm font-black text-slate-950">{row.bankName}</h3>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{row.note}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-base font-black text-navy-800">{formatRate(usedRate)}</p>
+                  <span
+                    className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-bold ${statusClasses[status]}`}
+                  >
+                    {statusLabels[status]}
+                  </span>
+                </div>
+              </div>
+
+              {row.fetchError ? (
+                <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold leading-5 text-red-700">
+                  {row.fetchError}
+                </p>
+              ) : null}
+
+              <dl className="mt-3 rounded-lg bg-white/80 px-3 py-2">
+                <InfoRow label="月返済" value={formatMoney(row.monthlyPayment)} />
+                <InfoRow
+                  label="ボーナス返済"
+                  value={row.bonusPayment !== undefined ? formatMoney(row.bonusPayment) : "未計算"}
+                />
+                <InfoRow
+                  label="12年月返済差"
+                  value={formatManYen(row.netBenefit)}
+                  emphasis
+                />
+                <InfoRow label="保障" value={row.insuranceLevel} />
+                <InfoRow
+                  label="自動取得値"
+                  value={
+                    row.autoFetchedRate !== undefined ? formatRate(row.autoFetchedRate) : "未取得"
+                  }
+                />
+              </dl>
+
+              <div className="mt-3 space-y-2">
+                <input
+                  inputMode="decimal"
+                  aria-label={`${row.bankName}の手入力補正金利`}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-navy-600 focus:ring-4 focus:ring-navy-100"
+                  placeholder="手入力補正 例 0.920"
+                  value={manualInputs[row.id] ?? ""}
+                  onChange={(event) =>
+                    setManualInputs((current) => ({
+                      ...current,
+                      [row.id]: event.target.value,
+                    }))
+                  }
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  {source ? (
+                    <Button
+                      variant="secondary"
+                      className="min-h-10 px-3 py-2 text-xs"
+                      onClick={() => onOpenBank(source, row.id)}
+                    >
+                      <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                      公式
+                    </Button>
+                  ) : (
+                    <span className="rounded-lg border border-slate-200 px-3 py-2 text-center text-xs text-slate-400">
+                      公式未設定
+                    </span>
+                  )}
+                  <Button
+                    variant="primary"
+                    className="min-h-10 px-3 py-2 text-xs"
+                    onClick={() => onRecalculate(row.id, parseManualRate(row.id))}
+                  >
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    再判定
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-soft md:block">
+        <table className="min-w-[1320px] text-left text-sm">
         <thead className="bg-slate-50 text-xs text-slate-500">
           <tr>
             <th className="px-3 py-3 font-bold">銀行名</th>
@@ -177,7 +283,8 @@ export function ComparisonTable({
             );
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }

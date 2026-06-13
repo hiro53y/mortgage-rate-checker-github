@@ -37,6 +37,69 @@ export function calculateEqualPeriodicPayment(
   return (principal * periodicRate * compounded) / (compounded - 1);
 }
 
+type IsoDateParts = {
+  year: number;
+  month: number;
+  day: number;
+};
+
+function parseIsoDateParts(value: string): IsoDateParts | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+function formatIsoDateParts({ year, month, day }: IsoDateParts): string {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function addMonthsToIsoDate(parts: IsoDateParts, monthsToAdd: number): string {
+  const zeroBasedMonth = parts.month - 1 + monthsToAdd;
+  const year = parts.year + Math.floor(zeroBasedMonth / 12);
+  const month = ((zeroBasedMonth % 12) + 12) % 12 + 1;
+  const day = Math.min(parts.day, daysInMonth(year, month));
+  return formatIsoDateParts({ year, month, day });
+}
+
+export function getLocalTodayIsoDate(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function getEffectiveNextPaymentDate(
+  nextPaymentDate: string,
+  todayIsoDate = getLocalTodayIsoDate(),
+): string {
+  const nextParts = parseIsoDateParts(nextPaymentDate);
+  const todayParts = parseIsoDateParts(todayIsoDate);
+  if (!nextParts || !todayParts || nextPaymentDate >= todayIsoDate) {
+    return nextPaymentDate;
+  }
+
+  const monthDiff =
+    (todayParts.year - nextParts.year) * 12 + (todayParts.month - nextParts.month);
+  const sameMonthCandidate = addMonthsToIsoDate(nextParts, Math.max(monthDiff, 0));
+  if (sameMonthCandidate >= todayIsoDate) {
+    return sameMonthCandidate;
+  }
+  return addMonthsToIsoDate(nextParts, Math.max(monthDiff + 1, 1));
+}
+
 export function calculateRemainingMonths(fromDate: string, endDate: string): number {
   const start = new Date(fromDate);
   const end = new Date(endDate);

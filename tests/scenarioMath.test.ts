@@ -96,18 +96,28 @@ describe("scenarioMath", () => {
     assert.match(currentRateNegotiationSummary(0.755, 0.95).title, /低い/);
   });
 
-  it("derives same-rate scenario from current manual payment and makes annual difference zero", () => {
-    const scenario = deriveScenarioFromLoan(testScenarios[1], testLoanProfile, MOMIJI_LOWER_RATE);
+  it("derives same-rate scenario from current-rate calculated payment and makes annual difference zero", () => {
+    const scenario = deriveScenarioFromLoan(
+      testScenarios[1],
+      testLoanProfile,
+      MOMIJI_LOWER_RATE,
+      "2026-06-13",
+    );
 
-    assert.equal(scenario.monthlyPayment, 90916);
-    assert.equal(scenario.bonusPayment, 114283);
+    assert.equal(scenario.monthlyPayment, 91068);
+    assert.equal(scenario.bonusPayment, 114237);
     assert.equal(scenario.annualIncrease, 0);
     assert.equal(scenario.shouldSuggestNegotiation, true);
     assert.match(scenario.note, /現在条件/);
   });
 
   it("derives lower-rate scenario as a saving against the current loan condition", () => {
-    const scenario = deriveScenarioFromLoan(testScenarios[0], testLoanProfile, MOMIJI_LOWER_RATE);
+    const scenario = deriveScenarioFromLoan(
+      testScenarios[0],
+      testLoanProfile,
+      MOMIJI_LOWER_RATE,
+      "2026-06-13",
+    );
 
     assert.ok(scenario.monthlyPayment < testLoanProfile.monthlyPayment);
     assert.ok(scenario.bonusPayment < testLoanProfile.bonusPayment);

@@ -3,6 +3,7 @@ import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { InfoRow } from "../components/InfoRow";
 import { MoneyDisplay } from "../components/MoneyDisplay";
+import { PaymentBasisNotice } from "../components/PaymentBasisNotice";
 import { SectionTitle } from "../components/SectionTitle";
 import {
   formatMoney,
@@ -10,13 +11,18 @@ import {
   formatRate,
   formatSignedMoney,
 } from "../lib/formatters";
-import type { LoanProfile, RefinanceCostBreakdown, RefinanceResult } from "../types";
+import type {
+  LoanPaymentBasisStatus,
+  LoanProfile,
+  RefinanceCostBreakdown,
+  RefinanceResult,
+} from "../types";
 
 type RefinanceBenefitPageProps = {
   result: RefinanceResult;
   costBreakdown: RefinanceCostBreakdown;
   loan: LoanProfile;
-  paymentWarning: string | null;
+  paymentBasis: LoanPaymentBasisStatus;
   onBack: () => void;
 };
 
@@ -34,7 +40,7 @@ export function RefinanceBenefitPage({
   result,
   costBreakdown,
   loan,
-  paymentWarning,
+  paymentBasis,
   onBack,
 }: RefinanceBenefitPageProps) {
   const benefitCardTone = result.netBenefit >= 0 ? "green" : "amber";
@@ -67,17 +73,11 @@ export function RefinanceBenefitPage({
           />
         </dl>
         <p className="rounded-lg bg-white px-3 py-3 text-xs leading-5 text-slate-600">
-          比較表の非基準行から、12年差額目安が最も大きい候補を自動選択しています。下の金額は、同じ残高・残期間で現在条件を続けた場合と、候補金利へ借換えた場合の概算差です。
+          比較表の非基準行から、残期間全体・ボーナス返済・諸費用を含めた概算メリットが最も大きい候補を自動選択しています。下の金額は、同じ残高・残期間で現在金利を続けた場合と、候補金利へ借換えた場合の概算差です。
         </p>
       </Card>
 
-      {paymentWarning ? (
-        <Card tone="amber">
-          <p className="text-sm font-semibold leading-6 text-amber-900">
-            {paymentWarning}
-          </p>
-        </Card>
-      ) : null}
+      <PaymentBasisNotice loan={loan} paymentBasis={paymentBasis} />
 
       {result.candidateReviewWarning ? (
         <Card tone="amber">

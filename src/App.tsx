@@ -3,7 +3,7 @@ import { AppShell } from "./components/AppShell";
 import {
   buildRefinanceResultFromCurrentLoan,
   deriveComparisonRowsFromLoan,
-  getLoanPaymentStalenessWarning,
+  getLoanPaymentBasisStatus,
   isBaseComparisonRow,
   selectBestRefinanceCandidate,
 } from "./lib/comparisonMath";
@@ -46,7 +46,11 @@ function getDefaultView(hasSavedData: boolean): ViewName {
 function deriveAppDataFromCurrentLoan(data: AppStorage): AppStorage {
   const scenarios = deriveScenariosFromLoan(data.scenarios, data.loanProfile, MOMIJI_LOWER_RATE);
   const comparisonRows = deriveComparisonRowsFromLoan(data.comparisonRows, data.loanProfile);
-  const refinanceCandidate = selectBestRefinanceCandidate(comparisonRows);
+  const refinanceCandidate = selectBestRefinanceCandidate(
+    comparisonRows,
+    data.refinanceCostBreakdown,
+    data.loanProfile,
+  );
   return {
     ...data,
     scenarios,
@@ -109,8 +113,8 @@ export default function App() {
     };
   }, []);
 
-  const paymentWarning = useMemo(
-    () => getLoanPaymentStalenessWarning(appData.loanProfile),
+  const paymentBasis = useMemo(
+    () => getLoanPaymentBasisStatus(appData.loanProfile),
     [appData.loanProfile],
   );
 
@@ -366,7 +370,7 @@ export default function App() {
             rows={appData.comparisonRows}
             sources={appData.bankSources}
             loan={appData.loanProfile}
-            paymentWarning={paymentWarning}
+            paymentBasis={paymentBasis}
             rateFetchState={appData.rateFetchState}
             isFetchingRates={isFetchingRates}
             onOpenBank={openBank}
@@ -381,7 +385,7 @@ export default function App() {
             result={appData.refinanceResult}
             costBreakdown={appData.refinanceCostBreakdown}
             loan={appData.loanProfile}
-            paymentWarning={paymentWarning}
+            paymentBasis={paymentBasis}
             onBack={() => setActiveView("comparison")}
           />
         );
@@ -403,7 +407,7 @@ export default function App() {
         return (
           <HomePage
             loan={appData.loanProfile}
-            paymentWarning={paymentWarning}
+            paymentBasis={paymentBasis}
             lastCheckedAt={appData.lastCheckedAt}
             onCheckLatest={() => openBank(findMomijiSource(appData))}
             onScenario={() => setActiveView("scenario")}

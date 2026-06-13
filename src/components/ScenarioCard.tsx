@@ -44,7 +44,7 @@ export function ScenarioCard({ scenario, lowerRate, currentRate }: ScenarioCardP
         <InfoRow label="毎月返済額" value={formatApproxMoney(scenario.monthlyPayment)} emphasis />
         <InfoRow label="ボーナス返済額" value={formatApproxMoney(scenario.bonusPayment)} />
         <InfoRow
-          label="年間差額（現在比）"
+          label="金利比較差（年額）"
           value={formatApproxSignedMoney(scenario.annualIncrease)}
         />
       </dl>

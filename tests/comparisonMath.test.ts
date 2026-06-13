@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildRefinanceResultFromCurrentLoan,
   deriveComparisonRowsFromLoan,
+  getLoanPaymentBasisStatus,
   getLoanPaymentStalenessWarning,
   getRateUsedForCalculation,
   recalculateComparisonRow,
@@ -82,7 +83,7 @@ describe("comparisonMath", () => {
     const recalculated = recalculateComparisonRow(
       { ...row, manualOverrideRate: 0.89, autoFetchedRate: undefined },
       loan,
-      90916,
+      getLoanPaymentBasisStatus(loan, "2026-06-13"),
     );
     assert.equal(recalculated.rateUsedForCalculation, 0.89);
     assert.ok(recalculated.monthlyPayment > 0);
@@ -120,6 +121,7 @@ describe("comparisonMath", () => {
         },
       ],
       changedLoan,
+      "2026-06-13",
     );
 
     assert.equal(rows[0].bankName, "test（現在条件）");
@@ -138,6 +140,7 @@ describe("comparisonMath", () => {
       candidate,
       refinanceCosts,
       changedLoan,
+      "2026-06-13",
     );
     assert.equal(result.candidateBankName, "住信SBIネット銀行");
     assert.equal(result.candidateRate, 0.89);
@@ -152,11 +155,60 @@ describe("comparisonMath", () => {
   });
 
   it("warns when the current rate changed but registered payments still look stale", () => {
+    const paymentBasis = getLoanPaymentBasisStatus(
+      {
+        ...loan,
+        currentRate: 1.005,
+      },
+      "2026-06-13",
+    );
+    assert.equal(paymentBasis.effectiveNextPaymentDate, "2026-06-27");
+    assert.equal(paymentBasis.remainingMonths, 484);
+    assert.equal(paymentBasis.baselineMonthlyPayment, 91068);
+    assert.equal(paymentBasis.baselineBonusPayment, 114237);
+
     const warning = getLoanPaymentStalenessWarning({
       ...loan,
       currentRate: 1.005,
     });
-    assert.match(warning ?? "", /登録済み返済額に差/);
-    assert.match(warning ?? "", /毎月返済額/);
+    assert.match(warning ?? "", /登録済み返済額/);
+    assert.match(warning ?? "", /概算額/);
+    assert.match(warning ?? "", /次回返済日/);
+  });
+
+  it("selects the refinance candidate by full net benefit, not monthly-only display benefit", () => {
+    const changedLoan = {
+      ...loan,
+      currentRate: 1.005,
+      monthlyPayment: 91068,
+      bonusPayment: 114237,
+    };
+    const selected = selectBestRefinanceCandidate(
+      [
+        {
+          ...row,
+          id: "monthly-only",
+          rowKind: "candidate",
+          bankName: "月返済だけ安い銀行",
+          monthlyPayment: 88000,
+          bonusPayment: 160000,
+          netBenefit: 400000,
+        },
+        {
+          ...row,
+          id: "full-benefit",
+          rowKind: "candidate",
+          bankName: "総額で有利な銀行",
+          monthlyPayment: 90000,
+          bonusPayment: 100000,
+          netBenefit: 150000,
+        },
+      ],
+      refinanceCosts,
+      changedLoan,
+      "2026-06-13",
+    );
+
+    assert.equal(selected?.id, "full-benefit");
   });
 });
