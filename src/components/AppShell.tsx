@@ -1,6 +1,7 @@
 import { BarChart3, Calculator, Download, Home, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ViewName } from "../types";
+import { APP_BUILD_LABEL } from "../lib/version";
 import { Button } from "./Button";
 
 type AppShellProps = {
@@ -30,7 +31,7 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-slate-100 text-slate-950">
       <div className="mx-auto min-h-screen max-w-[430px] bg-slate-50 shadow-2xl">
-        <main className="min-h-screen px-4 pb-28 pt-5">
+        <main className="min-h-screen px-4 pb-44 pt-5">
           {canInstall ? (
             <div className="mb-4 rounded-lg border border-navy-100 bg-white p-3 shadow-soft">
               <div className="flex items-center justify-between gap-3">
@@ -51,6 +52,7 @@ export function AppShell({
         <footer className="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-[430px] border-t border-slate-200 bg-white/95 px-3 pb-3 pt-2 backdrop-blur">
           <p className="mb-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-4 text-slate-500">
             概算シミュレーションです。実際の条件は各金融機関の公式ページをご確認ください。
+            <span className="mt-1 block font-bold text-navy-700">更新: {APP_BUILD_LABEL}</span>
           </p>
           <nav className="grid grid-cols-4 gap-1">
             {navItems.map((item) => {
