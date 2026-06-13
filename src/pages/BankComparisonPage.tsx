@@ -5,6 +5,7 @@ import { ComparisonTable } from "../components/ComparisonTable";
 import { InfoRow } from "../components/InfoRow";
 import { PaymentBasisNotice } from "../components/PaymentBasisNotice";
 import { SectionTitle } from "../components/SectionTitle";
+import { isLatestFetchedCandidate } from "../lib/comparisonMath";
 import { formatDateTimeJa, formatMoney, formatRate } from "../lib/formatters";
 import type {
   BankComparisonRow,
@@ -44,6 +45,8 @@ export function BankComparisonPage({
   onRecalculateRow,
   onRefinance,
 }: BankComparisonPageProps) {
+  const hasFetchedRefinanceCandidate = rows.some(isLatestFetchedCandidate);
+
   return (
     <div className="space-y-4">
       <header>
@@ -69,9 +72,17 @@ export function BankComparisonPage({
           <InfoRow label="表の差額期間" value="144か月（12年）" />
         </dl>
         <p className="text-xs text-slate-500">
-          各銀行候補は、同じ残高・残期間で月返済とボーナス返済を概算します。表の差額は「比較用の月返済」と候補月返済の12年差額目安で、借換え画面では残期間全体と諸費用を含めて再計算します。
+          各銀行候補は、同じ残高・残期間で月返済とボーナス返済を概算します。表の差額は「比較用の月返済」と候補月返済の12年差額目安です。借換え候補は、最新金利を自動取得できた銀行の中から判定使用金利が最も低い銀行を選びます。
         </p>
       </Card>
+
+      {!hasFetchedRefinanceCandidate ? (
+        <Card tone="amber">
+          <p className="text-sm font-semibold leading-6 text-amber-900">
+            最新金利を自動取得できた候補銀行がまだありません。未取得・取得失敗・サンプル値だけの銀行は借換え候補にしません。「再取得」を押すか、公式ページで確認して手入力補正してください。
+          </p>
+        </Card>
+      ) : null}
 
       <PaymentBasisNotice loan={loan} paymentBasis={paymentBasis} />
 
@@ -107,7 +118,7 @@ export function BankComparisonPage({
       />
 
       <p className="text-xs leading-5 text-slate-500">
-        12年差額目安 = （比較用の月返済 - 候補の月返済）× 144か月。手入力補正がある場合は手入力値を優先して概算再判定します。
+        12年差額目安 = （比較用の月返済 - 候補の月返済）× 144か月。手入力補正がある場合は手入力値を優先して概算再判定します。借換え候補選定では、自動取得できていない銀行を除外します。
       </p>
 
       <Button fullWidth onClick={onRefinance}>

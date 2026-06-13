@@ -98,8 +98,8 @@ export const defaultComparisonRows: BankComparisonRow[] = [
     insuranceLevel: "がん50%",
     monthlyPayment: 88955,
     netBenefit: 284000,
-    isPriorityCandidate: true,
-    note: "有力候補。保障条件は公式ページで要確認",
+    isPriorityCandidate: false,
+    note: "保障条件は公式ページで要確認",
   },
   {
     id: "hirogin-row",
@@ -167,7 +167,7 @@ export function createSampleAppStorage(): AppStorage {
       scenarios: defaultScenarios,
       bankSources: bankRateSources,
       comparisonRows: defaultComparisonRows,
-      refinanceResult: defaultRefinanceResult,
+      refinanceResult: null,
       refinanceCostBreakdown: defaultRefinanceCostBreakdown,
       rateFetchState: {
         source: "sample",

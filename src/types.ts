@@ -131,7 +131,7 @@ export type AppStorage = {
   scenarios: ScenarioRate[];
   bankSources: BankRateSource[];
   comparisonRows: BankComparisonRow[];
-  refinanceResult: RefinanceResult;
+  refinanceResult: RefinanceResult | null;
   refinanceCostBreakdown: RefinanceCostBreakdown;
   lastCheckedAt?: string;
   rateFetchState?: {

@@ -117,7 +117,30 @@ describe("comparisonMath", () => {
           autoFetchedRate: undefined,
           manualOverrideRate: undefined,
           insuranceLevel: "がん50%",
+          rateStatus: "failed",
           note: "保障条件は公式ページで要確認",
+        },
+        {
+          ...row,
+          id: "mufg-row",
+          bankName: "三菱UFJ銀行",
+          effectiveRate: 1.2,
+          autoFetchedRate: 0.995,
+          manualOverrideRate: undefined,
+          lastFetchedAt: "2026-06-13T06:47:00.000Z",
+          insuranceLevel: "疾病保障プラン要確認",
+          note: "公式ページから金利候補を自動抽出",
+        },
+        {
+          ...row,
+          id: "chugin-row",
+          bankName: "中国銀行",
+          effectiveRate: 1.2,
+          autoFetchedRate: 1.1,
+          manualOverrideRate: undefined,
+          lastFetchedAt: "2026-06-13T06:47:00.000Z",
+          insuranceLevel: "がん団信上乗せ条件は要確認",
+          note: "公式ページから金利候補を自動抽出",
         },
       ],
       changedLoan,
@@ -132,9 +155,11 @@ describe("comparisonMath", () => {
 
     const candidate = selectBestRefinanceCandidate(rows);
     assert.ok(candidate);
-    assert.equal(candidate.id, "netbk-row");
+    assert.equal(candidate.id, "mufg-row");
     assert.equal(candidate.rowKind, "candidate");
     assert.ok((candidate.bonusPayment ?? 0) > 0);
+    assert.equal(rows.find((candidateRow) => candidateRow.id === "netbk-row")?.isPriorityCandidate, false);
+    assert.equal(rows.find((candidateRow) => candidateRow.id === "mufg-row")?.isPriorityCandidate, true);
 
     const result = buildRefinanceResultFromCurrentLoan(
       candidate,
@@ -142,8 +167,8 @@ describe("comparisonMath", () => {
       changedLoan,
       "2026-06-13",
     );
-    assert.equal(result.candidateBankName, "住信SBIネット銀行");
-    assert.equal(result.candidateRate, 0.89);
+    assert.equal(result.candidateBankName, "三菱UFJ銀行");
+    assert.equal(result.candidateRate, 0.995);
     assert.equal(result.baseMonthlyPayment, 90916);
     assert.equal(result.baseBonusPayment, 114283);
     assert.equal(result.candidateMonthlyPayment, candidate.monthlyPayment);
@@ -151,7 +176,54 @@ describe("comparisonMath", () => {
     assert.equal(result.totalPaymentDifference, result.currentRemainingTotalPayment - result.refinanceRemainingTotalPayment);
     assert.equal(result.netBenefit, result.totalPaymentDifference - result.refinanceCosts);
     assert.equal(result.candidateNeedsReview, true);
-    assert.ok(result.netBenefit > 0);
+    assert.ok(Number.isFinite(result.netBenefit));
+  });
+
+  it("does not select a refinance candidate when no bank has a latest auto-fetched rate", () => {
+    const rows = deriveComparisonRowsFromLoan(
+      [
+        {
+          ...row,
+          id: "base",
+          bankName: "もみじ銀行（現在条件）",
+          autoFetchedRate: undefined,
+          manualOverrideRate: undefined,
+          monthlyPayment: 90916,
+          netBenefit: null,
+        },
+        {
+          ...row,
+          id: "netbk-row",
+          bankName: "住信SBIネット銀行",
+          effectiveRate: 0.89,
+          autoFetchedRate: undefined,
+          manualOverrideRate: undefined,
+          rateStatus: "failed",
+          lastFetchedAt: "2026-06-13T06:47:00.000Z",
+          fetchError: "金利候補を自動抽出できませんでした。",
+        },
+        {
+          ...row,
+          id: "manual-only-row",
+          bankName: "手入力だけの銀行",
+          effectiveRate: 1.2,
+          autoFetchedRate: undefined,
+          manualOverrideRate: 0.87,
+          rateStatus: "manual",
+          lastManualUpdatedAt: "2026-06-13T06:47:00.000Z",
+        },
+      ],
+      {
+        ...loan,
+        currentRate: 1.005,
+        monthlyPayment: 90916,
+        bonusPayment: 114283,
+      },
+      "2026-06-13",
+    );
+
+    assert.equal(selectBestRefinanceCandidate(rows), null);
+    assert.equal(rows.some((candidateRow) => candidateRow.isPriorityCandidate), false);
   });
 
   it("warns when the current rate changed but registered payments still look stale", () => {
@@ -176,7 +248,7 @@ describe("comparisonMath", () => {
     assert.match(warning ?? "", /次回返済日/);
   });
 
-  it("selects the refinance candidate by full net benefit, not monthly-only display benefit", () => {
+  it("selects the lowest latest auto-fetched rate before benefit size", () => {
     const changedLoan = {
       ...loan,
       currentRate: 1.005,
@@ -187,21 +259,29 @@ describe("comparisonMath", () => {
       [
         {
           ...row,
-          id: "monthly-only",
+          id: "lower-rate",
           rowKind: "candidate",
-          bankName: "月返済だけ安い銀行",
+          bankName: "低金利銀行",
+          effectiveRate: 1.2,
+          autoFetchedRate: 0.92,
+          manualOverrideRate: undefined,
+          lastFetchedAt: "2026-06-13T06:47:00.000Z",
           monthlyPayment: 88000,
           bonusPayment: 160000,
-          netBenefit: 400000,
+          netBenefit: -400000,
         },
         {
           ...row,
-          id: "full-benefit",
+          id: "higher-rate",
           rowKind: "candidate",
-          bankName: "総額で有利な銀行",
+          bankName: "総額差が大きい銀行",
+          effectiveRate: 1.2,
+          autoFetchedRate: 0.99,
+          manualOverrideRate: undefined,
+          lastFetchedAt: "2026-06-13T06:47:00.000Z",
           monthlyPayment: 90000,
           bonusPayment: 100000,
-          netBenefit: 150000,
+          netBenefit: 800000,
         },
       ],
       refinanceCosts,
@@ -209,6 +289,6 @@ describe("comparisonMath", () => {
       "2026-06-13",
     );
 
-    assert.equal(selected?.id, "full-benefit");
+    assert.equal(selected?.id, "lower-rate");
   });
 });

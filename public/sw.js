@@ -1,4 +1,4 @@
-const CACHE_NAME = "mortgage-rate-checker-v3-20260613";
+const CACHE_NAME = "mortgage-rate-checker-v4-20260613";
 const APP_SHELL = [
   "/",
   "/index.html",

@@ -6,17 +6,29 @@
 - [x] 現在金利 1.005% と下限 0.950% の判定が「現在金利は下限金利より高い」になること
 - [x] 試算画面に判定式 `1.005% - 0.950% = +0.055%` が表示されること
 - [x] 比較表の基準が保存済み現在ローン条件であることを表示すること
+- [x] 次回返済日が過去日の場合、試算用の次回返済日を未来月へ繰り上げて表示すること
 - [x] 比較表に月返済とボーナス返済を分けて表示すること
 - [x] 比較表の差額列を「12年累計差（月返済分）」として表示すること
+- [x] スマホ比較カードの差額を「12年月返済差」として表示すること
 - [x] 借換え画面に現在/候補の月返済・ボーナス返済・総返済額差・諸費用差引後を表示すること
 - [x] 借換え候補の総返済額でボーナス返済差も再計算すること
+- [x] 借換え候補は最新金利を自動取得できた銀行だけから、判定使用金利が最も低い銀行を選ぶこと
+- [x] 自動取得失敗・未取得・サンプル値だけ・手入力だけの銀行を借換え候補にしないこと
+- [x] 最新取得済み候補がない場合、借換え画面に候補なしの案内を表示すること
+- [x] 金利抽出で `年--%` のプレースホルダーや団信上乗せ率だけを取得成功扱いしないこと
+- [x] ホームの金額非表示時に返済額確認カード内の金額も非表示になること
+- [x] 画面下部に `更新: 2026/06/13 v4` が表示されること
+- [x] Service Workerのキャッシュ名が `mortgage-rate-checker-v4-20260613` であること
+- [x] 初回設定フォームの保存ボタンが固定フッターに隠れず押せること
 - [x] ルート `npm test`
 - [x] ルート `npx tsc -b`
 - [x] `deliverables/mortgage-rate-checker-github/` 内で `npm test`
 - [x] `deliverables/mortgage-rate-checker-github/` 内で `npx tsc -b`
-- [ ] ルート `npm run build`（Vite/esbuild `spawn EPERM` のため未完了）
-- [ ] `deliverables/mortgage-rate-checker-github/` 内で `npm run build`（同じく `spawn EPERM` のため未完了）
-- [ ] ローカルVite画面確認（同じく `spawn EPERM` のため未完了）
+- [ ] ルート `npm run build`（OneDrive配下の `dist` 削除で `EPERM`。権限付き再実行は利用制限で不可）
+- [ ] `deliverables/mortgage-rate-checker-github/` 内で `npm run build`（OneDrive配下の `dist` 削除で `EPERM`）
+- [ ] ローカルVite画面確認（v4では未実施。Vite/esbuild起動が `EPERM`）
+- [ ] ローカルViteスマホ幅確認（v4では未実施。Vite/esbuild起動が `EPERM`）
+- [ ] 公開URLのv4反映確認（GitHub commit/pushとCloudflare Pages再デプロイ後に実施）
 
 ## 2026-06-12
 
@@ -63,5 +75,5 @@
 
 ## 注意
 
-- Vite dev serverのバックグラウンド起動はCodex実行ポリシーでブロックされたため、常駐サーバーURLの提示は未実施。
+- Windows/OneDrive配下では `dist` 削除やVite/esbuild起動が `EPERM` になる場合がある。必要に応じて権限付きで `npm run build` / `npm run dev` を実行する。
 - Cloudflare Pages Functions `/api/rates` はCloudflare環境での外部ページ取得が前提。ローカルVite単体ではAPIは存在しないため、画面側は失敗時に前回値/サンプル値へフォールバックする。

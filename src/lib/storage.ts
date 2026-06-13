@@ -5,7 +5,7 @@ import type {
   LoanProfile,
   ScenarioRate,
 } from "../types";
-import { createSampleAppStorage } from "./sampleData";
+import { createSampleAppStorage, defaultRefinanceResult } from "./sampleData";
 
 const STORAGE_KEY = "mortgage-rate-checker-v1";
 
@@ -94,8 +94,8 @@ export function validateAppStorage(value: unknown): AppStorage | null {
     bankSources: value.bankSources,
     comparisonRows: value.comparisonRows,
     refinanceResult: isObject(value.refinanceResult)
-      ? { ...sample.refinanceResult, ...value.refinanceResult }
-      : sample.refinanceResult,
+      ? { ...defaultRefinanceResult, ...value.refinanceResult }
+      : null,
     refinanceCostBreakdown: isObject(value.refinanceCostBreakdown)
       ? { ...sample.refinanceCostBreakdown, ...value.refinanceCostBreakdown }
       : sample.refinanceCostBreakdown,

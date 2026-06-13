@@ -19,7 +19,7 @@ import type {
 } from "../types";
 
 type RefinanceBenefitPageProps = {
-  result: RefinanceResult;
+  result: RefinanceResult | null;
   costBreakdown: RefinanceCostBreakdown;
   loan: LoanProfile;
   paymentBasis: LoanPaymentBasisStatus;
@@ -43,6 +43,40 @@ export function RefinanceBenefitPage({
   paymentBasis,
   onBack,
 }: RefinanceBenefitPageProps) {
+  if (!result) {
+    return (
+      <div className="space-y-4">
+        <header>
+          <p className="text-xs font-bold text-navy-700">借換え候補の概算</p>
+          <h1 className="mt-1 text-2xl font-black tracking-normal text-slate-950">
+            最新取得済みの候補がありません
+          </h1>
+        </header>
+
+        <Card tone="amber" className="space-y-3">
+          <SectionTitle title="候補選定の条件" />
+          <p className="text-sm font-semibold leading-6 text-amber-900">
+            借換え候補は、比較表で最新金利を自動取得できた銀行の中から、判定使用金利が最も低い銀行を選びます。未取得・取得失敗・サンプル値だけの銀行は候補にしません。
+          </p>
+        </Card>
+
+        <PaymentBasisNotice loan={loan} paymentBasis={paymentBasis} />
+
+        <Card className="space-y-3">
+          <SectionTitle title="次の操作" />
+          <p className="text-sm leading-6 text-slate-600">
+            比較画面で「再取得」を押してください。取得できない銀行は公式ページで確認し、必要に応じて比較表の手入力補正を使ってください。
+          </p>
+        </Card>
+
+        <Button fullWidth onClick={onBack}>
+          <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          比較表へ戻る
+        </Button>
+      </div>
+    );
+  }
+
   const benefitCardTone = result.netBenefit >= 0 ? "green" : "amber";
   const benefitHelper =
     result.netBenefit >= 0
@@ -73,7 +107,7 @@ export function RefinanceBenefitPage({
           />
         </dl>
         <p className="rounded-lg bg-white px-3 py-3 text-xs leading-5 text-slate-600">
-          比較表の非基準行から、残期間全体・ボーナス返済・諸費用を含めた概算メリットが最も大きい候補を自動選択しています。下の金額は、同じ残高・残期間で現在金利を続けた場合と、候補金利へ借換えた場合の概算差です。
+          比較表で最新金利を自動取得できた銀行の中から、判定使用金利が最も低い銀行を自動選択しています。未取得・取得失敗・サンプル値だけの銀行は候補にしません。下の金額は、同じ残高・残期間で現在金利を続けた場合と、候補金利へ借換えた場合の概算差です。
         </p>
       </Card>
 

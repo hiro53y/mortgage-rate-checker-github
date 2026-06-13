@@ -61,7 +61,7 @@ function deriveAppDataFromCurrentLoan(data: AppStorage): AppStorage {
           data.refinanceCostBreakdown,
           data.loanProfile,
         )
-      : data.refinanceResult,
+      : null,
   };
 }
 
@@ -209,6 +209,7 @@ export default function App() {
         if (item.rate === null) {
           return {
             ...row,
+            autoFetchedRate: undefined,
             rateStatus: row.manualOverrideRate !== undefined ? "manual" : "failed",
             lastFetchedAt: item.fetchedAt,
             fetchError: item.message,
@@ -245,6 +246,7 @@ export default function App() {
       const attemptAt = new Date().toISOString();
       try {
         const response = await fetchLatestRates(force);
+        const hasFetchedRate = response.items.some((item) => item.rate !== null);
         const comparisonRows = applyFetchedRates(appData.comparisonRows, response);
         persist(
           {
@@ -253,7 +255,9 @@ export default function App() {
             rateFetchState: {
               checkedMonth: response.month,
               lastAttemptAt: attemptAt,
-              lastSuccessfulAt: response.fetchedAt,
+              lastSuccessfulAt: hasFetchedRate
+                ? response.fetchedAt
+                : appData.rateFetchState?.lastSuccessfulAt,
               source: "api",
               message: response.message,
             },

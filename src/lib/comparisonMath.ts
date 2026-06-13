@@ -36,6 +36,15 @@ export function getRateStatus(row: BankComparisonRow): NonNullable<BankCompariso
   return row.rateStatus ?? "sample";
 }
 
+export function isLatestFetchedCandidate(row: BankComparisonRow): boolean {
+  return (
+    !isBaseComparisonRow(row) &&
+    row.autoFetchedRate !== undefined &&
+    row.lastFetchedAt !== undefined &&
+    row.rateStatus !== "failed"
+  );
+}
+
 export function isBaseComparisonRow(row: BankComparisonRow): boolean {
   return (
     row.rowKind === "base" ||
@@ -110,7 +119,7 @@ export function recalculateComparisonRow(
     bonusPayment,
     remainingTotalPayment,
     netBenefit,
-    isPriorityCandidate: netBenefit >= 250000,
+    isPriorityCandidate: false,
   };
 }
 
@@ -119,7 +128,12 @@ export function recalculateComparisonRows(
   loan: LoanProfile,
   paymentBasis = getLoanPaymentBasisStatus(loan),
 ): BankComparisonRow[] {
-  return rows.map((row) => recalculateComparisonRow(row, loan, paymentBasis));
+  const recalculatedRows = rows.map((row) => recalculateComparisonRow(row, loan, paymentBasis));
+  const lowestFetchedCandidate = selectBestRefinanceCandidate(recalculatedRows);
+  return recalculatedRows.map((row) => ({
+    ...row,
+    isPriorityCandidate: lowestFetchedCandidate?.id === row.id,
+  }));
 }
 
 function calculateTotalRefinanceCosts(refinanceCosts: RefinanceCostBreakdown): number {
@@ -157,10 +171,22 @@ export function selectBestRefinanceCandidate(
   loan?: LoanProfile,
   todayIsoDate?: string,
 ): BankComparisonRow | null {
-  const candidates = rows.filter((row) => !isBaseComparisonRow(row) && row.netBenefit !== null);
+  const candidates = rows.filter(isLatestFetchedCandidate);
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const sortedByRate = [...candidates].sort((a, b) => {
+    const rateDifference = getRateUsedForCalculation(a) - getRateUsedForCalculation(b);
+    if (Math.abs(rateDifference) > 0.000001) {
+      return rateDifference;
+    }
+    return (b.netBenefit ?? -Infinity) - (a.netBenefit ?? -Infinity);
+  });
+
   if (refinanceCosts && loan) {
     return (
-      candidates
+      sortedByRate
         .map((row) => ({
           row,
           netBenefit: buildRefinanceResultFromCurrentLoan(
@@ -170,14 +196,24 @@ export function selectBestRefinanceCandidate(
             todayIsoDate,
           ).netBenefit,
         }))
-        .sort((a, b) => b.netBenefit - a.netBenefit)[0]?.row ?? null
+        .sort((a, b) => {
+          const rateDifference =
+            getRateUsedForCalculation(a.row) - getRateUsedForCalculation(b.row);
+          if (Math.abs(rateDifference) > 0.000001) {
+            return rateDifference;
+          }
+          return b.netBenefit - a.netBenefit;
+        })[0]?.row ?? null
     );
   }
-  return candidates.sort((a, b) => (b.netBenefit ?? -Infinity) - (a.netBenefit ?? -Infinity))[0] ?? null;
+  return sortedByRate[0] ?? null;
 }
 
 function getCandidateReviewWarning(row: BankComparisonRow): string | undefined {
   const warnings: string[] = [];
+  if (!isLatestFetchedCandidate(row)) {
+    warnings.push("最新金利を自動取得できていない候補");
+  }
   if (!row.officialCheckedAt) {
     warnings.push("公式確認が未完了");
   }
