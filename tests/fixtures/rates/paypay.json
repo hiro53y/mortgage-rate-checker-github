@@ -1,0 +1,20 @@
+[
+  {
+    "honjitsuDate": "2026年6月21日",
+    "name": "変動金利",
+    "target": "financing",
+    "params": { "kinri1": 2.93, "kinri2": -1.9, "kinri3": 0.55 }
+  },
+  {
+    "honjitsuDate": "2026年6月21日",
+    "name": "変動金利",
+    "target": "refinancing",
+    "params": { "kinri1": 2.93, "kinri2": -1.9, "kinri3": 1.03 }
+  },
+  {
+    "honjitsuDate": "2026年6月21日",
+    "name": "10年固定金利",
+    "target": "refinancing",
+    "params": { "kinri1": 4.74, "kinri2": -1.9, "kinri3": 2.84 }
+  }
+]

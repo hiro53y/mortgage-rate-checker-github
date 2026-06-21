@@ -10,7 +10,28 @@ import {
   selectBestRefinanceCandidate,
 } from "../src/lib/comparisonMath.ts";
 import { ensureComparisonRowsIncludeBankSources } from "../src/lib/sampleData.ts";
-import type { BankComparisonRow, LoanProfile, RefinanceCostBreakdown } from "../src/types.ts";
+import type { BankComparisonRow, LoanProfile, RateOffer, RefinanceCostBreakdown } from "../src/types.ts";
+
+function makeOffer(id: string, bankName: string, rate: number): RateOffer {
+  return {
+    schemaVersion: 1,
+    bankRateSourceId: id,
+    bankName,
+    productName: "住宅ローン",
+    loanPurpose: "refinance",
+    rateType: "variable",
+    advertisedMinRate: rate,
+    applicableMonth: "2026-06",
+    fetchedAt: "2026-06-13T06:47:00.000Z",
+    sourceUrl: `https://example.com/${id}`,
+    sourceKind: "official-api",
+    confidence: "verified",
+    eligibility: "unknown",
+    conditionsSummary: "test",
+    adapterId: `${id}-fixture`,
+    rateOptions: [{ id: "normal", label: "通常", rate }],
+  };
+}
 
 const row: BankComparisonRow = {
   id: "test-bank",
@@ -46,6 +67,9 @@ const loan: LoanProfile = {
   nextPaymentDate: "2026-05-27",
   nextPaymentAmount: 86689,
   cancerInsuranceType: "がん100%込み",
+  desiredInsuranceCoverage: "standard",
+  borrowerBirthDate: "1980-01-01",
+  estimatedPropertyValue: 60_000_000,
   updatedAt: "2026-05-06T00:00:00.000+09:00",
 };
 
@@ -127,6 +151,7 @@ describe("comparisonMath", () => {
           bankName: "三菱UFJ銀行",
           effectiveRate: 1.2,
           autoFetchedRate: 0.995,
+          rateOffer: makeOffer("mufg", "三菱UFJ銀行", 0.995),
           manualOverrideRate: undefined,
           lastFetchedAt: "2026-06-13T06:47:00.000Z",
           insuranceLevel: "疾病保障プラン要確認",
@@ -138,6 +163,7 @@ describe("comparisonMath", () => {
           bankName: "中国銀行",
           effectiveRate: 1.2,
           autoFetchedRate: 1.1,
+          rateOffer: makeOffer("chugin", "中国銀行", 1.1),
           manualOverrideRate: undefined,
           lastFetchedAt: "2026-06-13T06:47:00.000Z",
           insuranceLevel: "がん団信上乗せ条件は要確認",
@@ -265,6 +291,12 @@ describe("comparisonMath", () => {
           bankName: "低金利銀行",
           effectiveRate: 1.2,
           autoFetchedRate: 0.92,
+          conditionMatchedRate: 0.92,
+          rateOffer: makeOffer("lower", "低金利銀行", 0.92),
+          sourceKind: "official-api",
+          confidence: "verified",
+          eligibility: "eligible",
+          applicableMonth: "2026-06",
           manualOverrideRate: undefined,
           lastFetchedAt: "2026-06-13T06:47:00.000Z",
           monthlyPayment: 88000,
@@ -278,6 +310,12 @@ describe("comparisonMath", () => {
           bankName: "総額差が大きい銀行",
           effectiveRate: 1.2,
           autoFetchedRate: 0.99,
+          conditionMatchedRate: 0.99,
+          rateOffer: makeOffer("higher", "総額差が大きい銀行", 0.99),
+          sourceKind: "official-api",
+          confidence: "verified",
+          eligibility: "eligible",
+          applicableMonth: "2026-06",
           manualOverrideRate: undefined,
           lastFetchedAt: "2026-06-13T06:47:00.000Z",
           monthlyPayment: 90000,

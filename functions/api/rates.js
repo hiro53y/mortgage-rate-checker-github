@@ -1,3 +1,12 @@
+import { getCachedRates, jsonResponse, refreshAllRates } from "./rateService.js";
+import {
+  extractRate as extractRateV7,
+  extractRateFromAggregate as extractRateFromAggregateV7,
+  getRateUrls as getRateUrlsV7,
+  normalizeText as normalizeTextV7,
+} from "./rateAdapters.js";
+
+/* v6 generic scraper snapshot. Kept as a migration reference only.
 const MAX_URLS_PER_SOURCE = 8;
 const FETCH_TIMEOUT_MS = 12000;
 const MIN_RATE = 0.25;
@@ -12,7 +21,7 @@ const AGGREGATE_RATE_URLS = [
 ];
 
 const REQUEST_HEADERS = {
-  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7",
+  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,any;q=0.7",
   "accept-language": "ja-JP,ja;q=0.9,en-US;q=0.6,en;q=0.4",
   "cache-control": "no-cache",
   pragma: "no-cache",
@@ -677,7 +686,7 @@ async function fetchBankRate(source, fetchedAt) {
   };
 }
 
-export async function onRequestGet(context) {
+async function onRequestGetV6(context) {
   const requestUrl = new URL(context.request.url);
   const force = requestUrl.searchParams.get("force") === "1";
   const now = new Date();
@@ -719,4 +728,47 @@ export async function onRequestGet(context) {
   }
 
   return json(payload);
+}
+
+*/
+
+export {
+  extractRateV7 as extractRate,
+  extractRateFromAggregateV7 as extractRateFromAggregate,
+  getRateUrlsV7 as getRateUrls,
+  normalizeTextV7 as normalizeText,
+};
+
+export async function onRequestGet(context) {
+  const cached = await getCachedRates(context.env);
+  if (cached) return jsonResponse(cached);
+  return jsonResponse({
+    schemaVersion: 7,
+    month: getMonthKey(new Date()),
+    fetchedAt: new Date().toISOString(),
+    items: [],
+    cached: false,
+    locked: false,
+    message:
+      "金利キャッシュがまだありません。Cron Workerの初回実行後に表示されます。今すぐ確認する場合は「再取得」を押してください。",
+  });
+}
+
+export async function onRequestPost(context) {
+  const requestUrl = new URL(context.request.url);
+  const origin = context.request.headers.get("origin");
+  if (origin && origin !== requestUrl.origin) {
+    return jsonResponse({ error: "Forbidden" }, 403);
+  }
+  try {
+    return jsonResponse(await refreshAllRates(context.env));
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        message: "rate refresh failed",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return jsonResponse({ error: "金利再取得に失敗しました。" }, 502);
+  }
 }

@@ -181,6 +181,30 @@ export function SetupPage({ loan, isInitial, onSave }: SetupPageProps) {
 
       <Card className="space-y-4">
         <SectionTitle title="返済条件" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className={labelClass}>
+            借入者の生年月日
+            <input
+              type="date"
+              className={inputClass}
+              value={form.borrowerBirthDate ?? ""}
+              onChange={(event) => updateText("borrowerBirthDate", event.target.value)}
+            />
+          </label>
+          <label className={labelClass}>
+            概算物件価値（円）
+            <input
+              inputMode="numeric"
+              className={inputClass}
+              value={form.estimatedPropertyValue ?? ""}
+              onChange={(event) => updateNumber("estimatedPropertyValue", event.target.value)}
+              placeholder="例 50,000,000"
+            />
+          </label>
+        </div>
+        <p className="text-xs leading-5 text-slate-500">
+          年齢条件と融資率を判定するために使います。未入力でも保存できますが、条件適合金利と借換え推薦は算定できません。
+        </p>
         <label className={labelClass}>
           現在適用金利（%）
           <input
@@ -245,11 +269,31 @@ export function SetupPage({ loan, isInitial, onSave }: SetupPageProps) {
         </label>
         <label className={labelClass}>
           団信条件
-          <input
+          <select
             className={inputClass}
-            value={form.cancerInsuranceType}
-            onChange={(event) => updateText("cancerInsuranceType", event.target.value)}
-          />
+            value={form.desiredInsuranceCoverage ?? "unknown"}
+            onChange={(event) => {
+              const value = event.target.value as LoanProfile["desiredInsuranceCoverage"];
+              const labels = {
+                standard: "一般団信",
+                cancer50: "がん50%保障",
+                cancer100: "がん100%保障",
+                "full-disease": "全疾病・多疾病保障",
+                unknown: "未選択",
+              };
+              setForm((current) => ({
+                ...current,
+                desiredInsuranceCoverage: value,
+                cancerInsuranceType: labels[value ?? "unknown"],
+              }));
+            }}
+          >
+            <option value="unknown">選択してください</option>
+            <option value="standard">一般団信</option>
+            <option value="cancer50">がん50%保障</option>
+            <option value="cancer100">がん100%保障</option>
+            <option value="full-disease">全疾病・多疾病保障</option>
+          </select>
         </label>
       </Card>
 

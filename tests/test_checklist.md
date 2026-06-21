@@ -1,5 +1,38 @@
 # テストチェックリスト
 
+## 2026-06-21 v7
+
+- [x] 住信SBI JSONPで借換え変動の融資率80%以下/超を区別する
+- [x] PayPay APIで新規・固定ではなく借換え変動金利を採用する
+- [x] SBI新生APIで当月の通常・自己資金・SBIハイパー金利を区別する
+- [x] 価格.comのShift_JISを復号し、総合サイト参考値として扱う
+- [x] 広島銀行の2.20%手数料、0.400%口コミ、固定列、過去月を採用しない
+- [x] 融資率80%超、35年超、団信上乗せ不明、年齢超過、条件不足を判定する
+- [x] 当月公式条件適合値だけを推薦し、前月値・総合サイト値を除外する
+- [x] 公式確認済み手入力だけを推薦候補にできる
+- [x] 取得失敗時に最後の正常値を保持する
+- [x] Workerの銀行別部分失敗で全体を失敗させない
+- [x] KVへ銀行別最新値・当月履歴を保存する
+- [x] 10分KVロック中は重複取得しない
+- [x] 旧localStorage JSONを読み込み、v7派生値を再計算できる
+- [x] 画面ビルド表示が `2026/06/21 v7`
+- [x] Service Workerが `mortgage-rate-checker-v7-20260621`
+- [x] ルート `npm test`
+- [x] ルート `node --check functions/api/rates.js`
+- [x] ルート `node --check functions/api/rateAdapters.js`
+- [x] ルート `node --check functions/api/rateService.js`
+- [x] ルート `node --check worker/src/index.js`
+- [x] ルート `npx tsc -b`
+- [x] ルート `npm run worker:types`
+- [x] ルート `npm run worker:check`
+- [ ] ルート `npm run build`（OneDriveのdist削除とesbuild起動がEPERM）
+- [x] `deliverables/mortgage-rate-checker-github/` の `npm test`
+- [x] `deliverables/mortgage-rate-checker-github/` の各 `node --check`
+- [x] `deliverables/mortgage-rate-checker-github/` の `npx tsc -b`
+- [ ] `deliverables/mortgage-rate-checker-github/` の `npm run build`（同じ実行環境制限）
+- [ ] ローカルViteのスマホ/デスクトップ画面確認（同じ実行環境制限）
+- [ ] 本番KV ID設定、Worker/Pagesデプロイ、公開URLのv7反映確認
+
 ## 2026-06-13
 
 - [x] 住信SBIネット銀行の口コミ欄にある過去年利 0.400% を現在の変動金利として採用しないこと

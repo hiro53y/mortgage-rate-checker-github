@@ -5,7 +5,7 @@ import type {
   LoanProfile,
   ScenarioRate,
 } from "../types";
-import { createSampleAppStorage, defaultRefinanceResult } from "./sampleData";
+import { createSampleAppStorage, defaultRefinanceResult } from "./sampleData.ts";
 
 const STORAGE_KEY = "mortgage-rate-checker-v1";
 
@@ -86,12 +86,26 @@ export function validateAppStorage(value: unknown): AppStorage | null {
   }
 
   const sample = createSampleAppStorage();
+  const savedSources = value.bankSources as BankRateSource[];
+  const mergedSources = sample.bankSources.map((source) => ({
+    ...source,
+    ...(savedSources.find((saved) => saved.id === source.id) ?? {}),
+    adapter: source.adapter,
+    apiUrl: source.apiUrl,
+    backupApiUrl: source.backupApiUrl,
+    referenceUrl: source.referenceUrl,
+    rateUrls: source.rateUrls,
+    aggregateAliases: source.aggregateAliases,
+    preferredKeywords: source.preferredKeywords,
+    expectedVariableRateRange: source.expectedVariableRateRange,
+    maxMonthlyDelta: source.maxMonthlyDelta,
+  }));
   return {
     ...sample,
     ...value,
-    loanProfile: value.loanProfile,
+    loanProfile: { ...sample.loanProfile, ...value.loanProfile },
     scenarios: value.scenarios,
-    bankSources: value.bankSources,
+    bankSources: mergedSources,
     comparisonRows: value.comparisonRows,
     refinanceResult: isObject(value.refinanceResult)
       ? { ...defaultRefinanceResult, ...value.refinanceResult }

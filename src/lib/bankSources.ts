@@ -1,6 +1,8 @@
 import type { BankRateSource } from "../types";
+import { BANK_RATE_SOURCES } from "../../shared/bankRateSources.js";
 
-export const bankRateSources: BankRateSource[] = [
+/* v6 bank source snapshot. The shared master below is authoritative.
+const legacyBankRateSources: BankRateSource[] = [
   {
     id: "momiji",
     bankName: "もみじ銀行",
@@ -158,3 +160,9 @@ export const bankRateSources: BankRateSource[] = [
     note: "金利と団信条件を同一ページ内で確認する",
   },
 ];
+
+*/
+
+export const bankRateSources: BankRateSource[] = BANK_RATE_SOURCES.map((source) => ({
+  ...source,
+}));

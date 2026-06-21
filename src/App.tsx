@@ -30,6 +30,7 @@ import type {
   BankComparisonRow,
   BankRateSource,
   LoanProfile,
+  ManualRateVerification,
   ScenarioRate,
   ViewName,
 } from "./types";
@@ -145,19 +146,12 @@ export default function App() {
   const openBank = (source: BankRateSource, rowId?: string) => {
     window.open(source.rateUrl, "_blank", "noopener,noreferrer");
     const now = new Date().toISOString();
-    const nextRows = rowId
-      ? appData.comparisonRows.map((row) =>
-          row.id === rowId ? { ...row, officialCheckedAt: now } : row,
-        )
-      : appData.comparisonRows;
     if (source.id === "momiji") {
-      const nextData = { ...appData, comparisonRows: nextRows, lastCheckedAt: now };
+      const nextData = { ...appData, lastCheckedAt: now };
       persist(nextData, isConfigured);
       return;
     }
-    if (rowId) {
-      persist({ ...appData, comparisonRows: nextRows }, isConfigured);
-    }
+    void rowId;
   };
 
   const saveLoanProfile = (loanProfile: LoanProfile) => {
@@ -213,19 +207,38 @@ export default function App() {
         if (!item) {
           return row;
         }
-        if (item.rate === null) {
+        if (!item.offer) {
+          const lastGoodOffer = item.lastGoodOffer ?? row.lastGoodRateOffer;
           return {
             ...row,
-            autoFetchedRate: undefined,
-            rateStatus: row.manualOverrideRate !== undefined ? "manual" : "failed",
+            rateOffer: lastGoodOffer ?? row.rateOffer,
+            lastGoodRateOffer: lastGoodOffer,
+            autoFetchedRate: lastGoodOffer?.advertisedMinRate,
+            advertisedMinRate: lastGoodOffer?.advertisedMinRate,
+            rateStatus:
+              row.manualOverrideRate !== undefined
+                ? "manual"
+                : lastGoodOffer
+                  ? "stale"
+                  : "failed",
             lastFetchedAt: item.fetchedAt,
             fetchError: item.message,
           };
         }
         return {
           ...row,
-          autoFetchedRate: item.rate,
-          rateStatus: row.manualOverrideRate !== undefined ? "manual" : "auto",
+          rateOffer: item.offer,
+          lastGoodRateOffer: item.offer,
+          autoFetchedRate: item.offer.advertisedMinRate,
+          advertisedMinRate: item.offer.advertisedMinRate,
+          rateStatus:
+            row.manualOverrideRate !== undefined
+              ? "manual"
+              : item.offer.sourceKind === "aggregator"
+                ? "reference"
+                : item.status === "needs-review"
+                  ? "reference"
+                  : "auto",
           lastFetchedAt: item.fetchedAt,
           fetchError: item.status === "needs-review" ? item.message : undefined,
         };
@@ -253,7 +266,7 @@ export default function App() {
       const attemptAt = new Date().toISOString();
       try {
         const response = await fetchLatestRates(force);
-        const hasFetchedRate = response.items.some((item) => item.rate !== null);
+        const hasFetchedRate = response.items.some((item) => Boolean(item.offer));
         const comparisonRows = applyFetchedRates(appData.comparisonRows, response);
         persist(
           {
@@ -301,8 +314,9 @@ export default function App() {
     }
   }, [activeView, isConfigured, refreshRates]);
 
-  const recalculateRow = (rowId: string, manualRate: number | null) => {
+  const recalculateRow = (rowId: string, verification: ManualRateVerification) => {
     const now = new Date().toISOString();
+    const manualRate = verification.rate;
     const comparisonRows = appData.comparisonRows.map((row) => {
       if (row.id !== rowId) {
         return row;
@@ -311,11 +325,21 @@ export default function App() {
         ...row,
         manualOverrideRate: manualRate ?? undefined,
         lastManualUpdatedAt: manualRate !== null ? now : undefined,
+        manualApplicableMonth:
+          manualRate !== null && verification.confirmed
+            ? verification.applicableMonth
+            : undefined,
+        manualSourceUrl:
+          manualRate !== null && verification.confirmed ? verification.sourceUrl : undefined,
+        manualVerifiedAt:
+          manualRate !== null && verification.confirmed ? now : undefined,
         rateStatus:
           manualRate !== null
             ? "manual"
             : row.autoFetchedRate !== undefined
-              ? "auto"
+              ? row.rateOffer?.sourceKind === "aggregator" || row.rateOffer?.confidence !== "verified"
+                ? "reference"
+                : "auto"
               : row.rateStatus ?? "sample",
       };
     });
@@ -329,7 +353,9 @@ export default function App() {
           source: manualRate !== null ? "manual" : appData.rateFetchState?.source,
           message:
             manualRate !== null
-              ? "手入力補正値を優先して概算再判定しました。"
+              ? verification.confirmed
+                ? "公式URL・適用年月を確認済みの手入力値で概算再判定しました。"
+                : "未確認の手入力補正値で概算表示しました。借換え推薦には使用しません。"
               : "手入力補正を解除し、自動取得値またはサンプル値で概算再判定しました。",
         },
       },

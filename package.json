@@ -7,7 +7,9 @@
     "dev": "vite --host 0.0.0.0",
     "build": "node scripts/clean-dist.mjs && tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node tests/mortgageMath.test.ts && node tests/scenarioMath.test.ts && node tests/refinanceMath.test.ts && node tests/comparisonMath.test.ts && node tests/rateExtraction.test.ts"
+    "test": "node tests/mortgageMath.test.ts && node tests/scenarioMath.test.ts && node tests/refinanceMath.test.ts && node tests/comparisonMath.test.ts && node tests/rateExtraction.test.ts && node tests/rateAdapters.test.ts && node tests/rateEligibility.test.ts && node tests/rateService.test.ts && node tests/storageMigration.test.ts",
+    "worker:types": "wrangler types --config worker/wrangler.jsonc worker/worker-configuration.d.ts",
+    "worker:check": "wrangler deploy --dry-run --config worker/wrangler.jsonc"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.1",
@@ -16,12 +18,15 @@
     "react-dom": "^19.2.1"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260621.1",
+    "@types/node": "^26.0.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.22",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
     "typescript": "^5.9.3",
-    "vite": "^7.2.6"
+    "vite": "^7.2.6",
+    "wrangler": "^4.103.0"
   }
 }
