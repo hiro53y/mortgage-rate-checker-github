@@ -1,0 +1,20 @@
+{
+  "COMMON": { "interestRateDateHL": "2026-06-01" },
+  "MASS": {
+    "INITIAL": {
+      "FLOATING": {
+        "normal": {
+          "body": {
+            "current": {
+              "interestRate": 1.08,
+              "normal": { "interestRate": 1.08 },
+              "ownFunds10per": { "interestRate": 1.06 },
+              "sbiHyper": { "interestRate": 0.99 }
+            },
+            "at202604": { "normal": { "interestRate": 0.73 } }
+          }
+        }
+      }
+    }
+  }
+}

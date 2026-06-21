@@ -10,11 +10,12 @@ export function isMonthlyAutoFetchDue(
   checkedMonth: string | undefined,
   date = new Date(),
 ): boolean {
-  return date.getDate() >= 10 && checkedMonth !== getCurrentMonthKey(date);
+  return checkedMonth !== getCurrentMonthKey(date);
 }
 
 export async function fetchLatestRates(force = false): Promise<RateFetchResponse> {
-  const response = await fetch(`/api/rates${force ? "?force=1" : ""}`, {
+  const response = await fetch("/api/rates", {
+    method: force ? "POST" : "GET",
     headers: { accept: "application/json" },
   });
   if (!response.ok) {

@@ -12,6 +12,7 @@ import type {
   BankRateSource,
   LoanPaymentBasisStatus,
   LoanProfile,
+  ManualRateVerification,
 } from "../types";
 
 type BankComparisonPageProps = {
@@ -29,7 +30,7 @@ type BankComparisonPageProps = {
   isFetchingRates: boolean;
   onOpenBank: (source: BankRateSource, rowId: string) => void;
   onRefreshRates: () => void;
-  onRecalculateRow: (rowId: string, manualRate: number | null) => void;
+  onRecalculateRow: (rowId: string, verification: ManualRateVerification) => void;
   onRefinance: () => void;
 };
 
@@ -45,7 +46,7 @@ export function BankComparisonPage({
   onRecalculateRow,
   onRefinance,
 }: BankComparisonPageProps) {
-  const hasFetchedRefinanceCandidate = rows.some(isLatestFetchedCandidate);
+  const hasFetchedRefinanceCandidate = rows.some((row) => isLatestFetchedCandidate(row));
 
   return (
     <div className="space-y-4">
@@ -69,17 +70,29 @@ export function BankComparisonPage({
             <InfoRow label="試算用の次回返済日" value={paymentBasis.effectiveNextPaymentDate} />
           ) : null}
           <InfoRow label="残期間" value={`${paymentBasis.remainingMonths}か月`} />
+          <InfoRow
+            label="借入者の生年月日"
+            value={loan.borrowerBirthDate ?? "未入力（条件判定不可）"}
+          />
+          <InfoRow
+            label="概算物件価値"
+            value={
+              loan.estimatedPropertyValue
+                ? formatMoney(loan.estimatedPropertyValue)
+                : "未入力（融資率判定不可）"
+            }
+          />
           <InfoRow label="表の差額期間" value="144か月（12年）" />
         </dl>
         <p className="text-xs text-slate-500">
-          各銀行候補は、同じ残高・残期間で月返済とボーナス返済を概算します。表の差額は「比較用の月返済」と候補月返済の12年差額目安です。借換え候補は、最新金利を自動取得できた銀行の中から判定使用金利が最も低い銀行を選びます。
+          各銀行候補は、同じ残高・残期間で月返済とボーナス返済を概算します。広告下限は参考値です。借換え候補は、当月の公式アダプタ値または公式確認済み手入力値のうち、年齢・融資率・残期間・団信条件に適合した金利だけから選びます。
         </p>
       </Card>
 
       {!hasFetchedRefinanceCandidate ? (
         <Card tone="amber">
           <p className="text-sm font-semibold leading-6 text-amber-900">
-            最新金利を自動取得できた候補銀行がまだありません。未取得・取得失敗・サンプル値だけの銀行は借換え候補にしません。「再取得」を押すか、公式ページで確認して手入力補正してください。
+            推薦条件を満たす候補がありません。当月の公式取得値でも、生年月日・概算物件価値・団信上乗せが未確定なら候補にしません。条件入力を確認するか、公式ページで確認した金利・適用年月を手入力してください。
           </p>
         </Card>
       ) : null}
@@ -118,7 +131,7 @@ export function BankComparisonPage({
       />
 
       <p className="text-xs leading-5 text-slate-500">
-        12年差額目安 = （比較用の月返済 - 候補の月返済）× 144か月。手入力補正がある場合は手入力値を優先して概算再判定します。借換え候補選定では、自動取得できていない銀行を除外します。
+        12年差額目安 = （比較用の月返済 - 候補の月返済）× 144か月。未確認の手入力値、総合サイト参考値、前月値、条件不足の金利は表示には使いますが、借換え推薦から除外します。
       </p>
 
       <Button fullWidth onClick={onRefinance}>

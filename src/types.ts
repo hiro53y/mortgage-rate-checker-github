@@ -27,8 +27,18 @@ export type LoanProfile = {
   nextPaymentDate: string;
   nextPaymentAmount: number;
   cancerInsuranceType: string;
+  desiredInsuranceCoverage?: InsuranceCoverage;
+  borrowerBirthDate?: string;
+  estimatedPropertyValue?: number;
   updatedAt: string;
 };
+
+export type InsuranceCoverage =
+  | "standard"
+  | "cancer50"
+  | "cancer100"
+  | "full-disease"
+  | "unknown";
 
 export type LoanPaymentBasisStatus = {
   registeredMonthlyPayment: number;
@@ -72,6 +82,68 @@ export type BankRateSource = {
   targetRateType: string;
   cancerInsuranceTarget: string;
   note: string;
+  adapter?: string;
+  apiUrl?: string;
+  backupApiUrl?: string;
+  referenceUrl?: string;
+  rateUrls?: string[];
+  aggregateAliases?: string[];
+  preferredKeywords?: string[];
+  expectedVariableRateRange?: [number, number];
+  maxMonthlyDelta?: number;
+};
+
+export type RateSourceKind =
+  | "official-api"
+  | "official-html"
+  | "aggregator"
+  | "manual-verified";
+
+export type RateConfidence = "verified" | "review" | "failed";
+export type RateEligibility = "eligible" | "conditional" | "ineligible" | "unknown";
+
+export type RateOption = {
+  id: string;
+  label: string;
+  rate: number;
+  ltvMax?: number;
+  ltvMinExclusive?: number;
+  ownFundsMinRatio?: number;
+  requiresSbiHyper?: boolean;
+  maxBorrowerAge?: number;
+  maxRemainingMonths?: number;
+};
+
+export type RateOffer = {
+  schemaVersion: number;
+  bankRateSourceId: string;
+  bankName: string;
+  productName: string;
+  loanPurpose: "refinance";
+  rateType: "variable";
+  advertisedMinRate?: number;
+  conditionMatchedRate?: number;
+  baseRate?: number;
+  discountRate?: number;
+  insuranceAddonRate?: number;
+  longTermAddonRate?: number;
+  applicableMonth: string;
+  fetchedAt: string;
+  sourceUrl: string;
+  sourceKind: RateSourceKind;
+  confidence: RateConfidence;
+  eligibility: RateEligibility;
+  conditionsSummary: string;
+  failureReason?: string;
+  adapterId: string;
+  rateOptions: RateOption[];
+};
+
+export type ManualRateVerification = {
+  rate: number | null;
+  confirmed: boolean;
+  applicableMonth?: string;
+  sourceUrl?: string;
 };
 
 export type BankComparisonRow = {
@@ -80,9 +152,21 @@ export type BankComparisonRow = {
   bankName: string;
   effectiveRate: number;
   autoFetchedRate?: number;
+  advertisedMinRate?: number;
+  conditionMatchedRate?: number;
+  rateOffer?: RateOffer;
+  lastGoodRateOffer?: RateOffer;
   manualOverrideRate?: number;
+  manualApplicableMonth?: string;
+  manualSourceUrl?: string;
+  manualVerifiedAt?: string;
   rateUsedForCalculation?: number;
-  rateStatus?: "sample" | "auto" | "manual" | "failed";
+  rateStatus?: "sample" | "auto" | "manual" | "reference" | "stale" | "failed";
+  sourceKind?: RateSourceKind;
+  confidence?: RateConfidence;
+  eligibility?: RateEligibility;
+  eligibilityReason?: string;
+  applicableMonth?: string;
   lastFetchedAt?: string;
   lastManualUpdatedAt?: string;
   officialCheckedAt?: string;
@@ -106,6 +190,9 @@ export type RefinanceResult = {
   candidateBonusPayment: number;
   candidateNeedsReview: boolean;
   candidateReviewWarning?: string;
+  candidateSourceKind?: RateSourceKind;
+  candidateApplicableMonth?: string;
+  candidateEligibilityReason?: string;
   currentRemainingTotalPayment: number;
   refinanceRemainingTotalPayment: number;
   refinanceCosts: number;
@@ -147,17 +234,21 @@ export type RateFetchItem = {
   bankRateSourceId: string;
   bankName: string;
   rate: number | null;
-  status: "success" | "failed" | "needs-review";
+  status: "success" | "failed" | "needs-review" | "stale";
   fetchedAt: string;
   sourceUrl: string;
   attemptedUrls?: string[];
   message: string;
+  offer?: RateOffer | null;
+  lastGoodOffer?: RateOffer | null;
 };
 
 export type RateFetchResponse = {
+  schemaVersion?: number;
   month: string;
   fetchedAt: string;
   items: RateFetchItem[];
   cached: boolean;
+  locked?: boolean;
   message: string;
 };

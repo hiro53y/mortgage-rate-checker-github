@@ -18,12 +18,18 @@ import {
   calculatePaybackMonths,
   judgeRefinance,
 } from "./refinanceMath.ts";
+import { evaluateRateOfferForLoan, isOfferCurrentMonth } from "./rateEligibility.ts";
 
 const BENEFIT_DISPLAY_MONTHS = 144;
 const PAYMENT_STALENESS_THRESHOLD_YEN = 1000;
 
 export function getRateUsedForCalculation(row: BankComparisonRow): number {
-  return row.manualOverrideRate ?? row.autoFetchedRate ?? row.effectiveRate;
+  return (
+    row.manualOverrideRate ??
+    row.conditionMatchedRate ??
+    row.autoFetchedRate ??
+    row.effectiveRate
+  );
 }
 
 export function getRateStatus(row: BankComparisonRow): NonNullable<BankComparisonRow["rateStatus"]> {
@@ -31,17 +37,25 @@ export function getRateStatus(row: BankComparisonRow): NonNullable<BankCompariso
     return "manual";
   }
   if (row.autoFetchedRate !== undefined) {
-    return "auto";
+    return row.rateOffer?.sourceKind === "aggregator" ? "reference" : "auto";
   }
   return row.rateStatus ?? "sample";
 }
 
-export function isLatestFetchedCandidate(row: BankComparisonRow): boolean {
+export function isLatestFetchedCandidate(row: BankComparisonRow, date = new Date()): boolean {
+  if (isBaseComparisonRow(row) || row.eligibility !== "eligible") return false;
+  const currentMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const verifiedManual =
+    row.manualOverrideRate !== undefined &&
+    Boolean(row.manualVerifiedAt) &&
+    row.manualApplicableMonth === currentMonth &&
+    Boolean(row.manualSourceUrl?.startsWith("https://"));
+  if (verifiedManual) return true;
   return (
-    !isBaseComparisonRow(row) &&
-    row.autoFetchedRate !== undefined &&
-    row.lastFetchedAt !== undefined &&
-    row.rateStatus !== "failed"
+    row.conditionMatchedRate !== undefined &&
+    row.rateOffer?.confidence === "verified" &&
+    row.rateOffer.sourceKind !== "aggregator" &&
+    isOfferCurrentMonth(row.rateOffer, date)
   );
 }
 
@@ -72,6 +86,14 @@ export function recalculateComparisonRow(
       rateUsedForCalculation: loan.currentRate,
       rateStatus: "sample",
       fetchError: undefined,
+      advertisedMinRate: undefined,
+      conditionMatchedRate: loan.currentRate,
+      rateOffer: undefined,
+      sourceKind: undefined,
+      confidence: undefined,
+      eligibility: "eligible",
+      eligibilityReason: "現在の登録条件",
+      applicableMonth: undefined,
       insuranceLevel: loan.cancerInsuranceType,
       monthlyPayment: paymentBasis.baselineMonthlyPayment,
       bonusPayment: paymentBasis.baselineBonusPayment,
@@ -87,7 +109,39 @@ export function recalculateComparisonRow(
     };
   }
 
-  const rate = getRateUsedForCalculation(row);
+  const offerEvaluation = row.rateOffer
+    ? evaluateRateOfferForLoan(row.rateOffer, loan, paymentBasis.todayIsoDate)
+    : null;
+  const hasVerifiedManual =
+    row.manualOverrideRate !== undefined &&
+    Boolean(row.manualVerifiedAt) &&
+    Boolean(row.manualApplicableMonth) &&
+    Boolean(row.manualSourceUrl);
+  const derivedRow: BankComparisonRow = {
+    ...row,
+    rateOffer:
+      row.rateOffer && offerEvaluation
+        ? {
+            ...row.rateOffer,
+            conditionMatchedRate: offerEvaluation.conditionMatchedRate,
+            eligibility: offerEvaluation.eligibility,
+            insuranceAddonRate: offerEvaluation.insuranceAddonRate,
+            longTermAddonRate: offerEvaluation.longTermAddonRate,
+          }
+        : row.rateOffer,
+    advertisedMinRate: row.rateOffer?.advertisedMinRate ?? row.advertisedMinRate,
+    conditionMatchedRate: offerEvaluation?.conditionMatchedRate,
+    sourceKind: hasVerifiedManual ? "manual-verified" : row.rateOffer?.sourceKind,
+    confidence: hasVerifiedManual ? "verified" : row.rateOffer?.confidence,
+    eligibility: hasVerifiedManual ? "eligible" : (offerEvaluation?.eligibility ?? "unknown"),
+    eligibilityReason: hasVerifiedManual
+      ? "公式URL・確認日・適用年月を登録した手入力値"
+      : (offerEvaluation?.reason ?? "取得条件がありません。"),
+    applicableMonth: hasVerifiedManual
+      ? row.manualApplicableMonth
+      : row.rateOffer?.applicableMonth,
+  };
+  const rate = getRateUsedForCalculation(derivedRow);
   const monthlyPayment = Math.round(
     calculateEqualPrincipalAndInterestPayment(
       loan.currentBalanceMonthly,
@@ -111,7 +165,7 @@ export function recalculateComparisonRow(
   );
 
   return {
-    ...row,
+    ...derivedRow,
     rowKind: "candidate",
     rateUsedForCalculation: rate,
     rateStatus: getRateStatus(row),
@@ -171,7 +225,7 @@ export function selectBestRefinanceCandidate(
   loan?: LoanProfile,
   todayIsoDate?: string,
 ): BankComparisonRow | null {
-  const candidates = rows.filter(isLatestFetchedCandidate);
+  const candidates = rows.filter((row) => isLatestFetchedCandidate(row));
   if (candidates.length === 0) {
     return null;
   }
@@ -214,9 +268,8 @@ function getCandidateReviewWarning(row: BankComparisonRow): string | undefined {
   if (!isLatestFetchedCandidate(row)) {
     warnings.push("最新金利を自動取得できていない候補");
   }
-  if (!row.officialCheckedAt) {
-    warnings.push("公式確認が未完了");
-  }
+  if (row.sourceKind === "manual-verified" && !row.manualVerifiedAt) warnings.push("手入力の公式確認が未完了");
+  if (row.rateOffer?.confidence !== "verified" && row.sourceKind !== "manual-verified") warnings.push("取得値の信頼度が要確認");
   if (row.insuranceLevel.includes("要確認") || row.note.includes("要確認")) {
     warnings.push("保障条件に要確認項目あり");
   }
@@ -276,6 +329,9 @@ export function buildRefinanceResultFromCurrentLoan(
     candidateBonusPayment,
     candidateNeedsReview: Boolean(candidateReviewWarning),
     candidateReviewWarning,
+    candidateSourceKind: row.sourceKind,
+    candidateApplicableMonth: row.applicableMonth,
+    candidateEligibilityReason: row.eligibilityReason,
     currentRemainingTotalPayment,
     refinanceRemainingTotalPayment,
     refinanceCosts: totalCosts,

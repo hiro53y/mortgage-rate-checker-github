@@ -56,7 +56,7 @@ export function RefinanceBenefitPage({
         <Card tone="amber" className="space-y-3">
           <SectionTitle title="候補選定の条件" />
           <p className="text-sm font-semibold leading-6 text-amber-900">
-            借換え候補は、比較表で最新金利を自動取得できた銀行の中から、判定使用金利が最も低い銀行を選びます。未取得・取得失敗・サンプル値だけの銀行は候補にしません。
+            借換え候補は、当月の公式アダプタ取得値または公式確認済み手入力値のうち、入力済みの年齢・融資率・残期間・団信条件に適合した金利だけから選びます。参考値、前月値、条件不足の銀行は候補にしません。
           </p>
         </Card>
 
@@ -65,7 +65,7 @@ export function RefinanceBenefitPage({
         <Card className="space-y-3">
           <SectionTitle title="次の操作" />
           <p className="text-sm leading-6 text-slate-600">
-            比較画面で「再取得」を押してください。取得できない銀行は公式ページで確認し、必要に応じて比較表の手入力補正を使ってください。
+            マイローン設定の生年月日・概算物件価値・団信区分を確認してください。取得できない銀行は公式ページで条件を確認し、比較表へ金利と適用年月を登録してください。
           </p>
         </Card>
 
@@ -105,10 +105,29 @@ export function RefinanceBenefitPage({
             value={`${result.candidateBankName} ${formatRate(result.candidateRate)}`}
             emphasis
           />
+          <InfoRow
+            label="適用年月"
+            value={result.candidateApplicableMonth ?? "不明"}
+          />
+          <InfoRow
+            label="取得元"
+            value={
+              result.candidateSourceKind === "official-api"
+                ? "公式API"
+                : result.candidateSourceKind === "official-html"
+                  ? "公式HTML"
+                  : result.candidateSourceKind === "manual-verified"
+                    ? "公式確認済み手入力"
+                    : "参考値"
+            }
+          />
         </dl>
         <p className="rounded-lg bg-white px-3 py-3 text-xs leading-5 text-slate-600">
-          比較表で最新金利を自動取得できた銀行の中から、判定使用金利が最も低い銀行を自動選択しています。未取得・取得失敗・サンプル値だけの銀行は候補にしません。下の金額は、同じ残高・残期間で現在金利を続けた場合と、候補金利へ借換えた場合の概算差です。
+          当月・公式・条件適合の候補から使用金利が最も低い銀行を自動選択しています。広告下限や総合サイト値だけでは候補にしません。下の金額は、同じ残高・残期間で現在金利を続けた場合と、候補金利へ借換えた場合の概算差です。
         </p>
+        {result.candidateEligibilityReason ? (
+          <p className="text-xs leading-5 text-slate-600">条件判定: {result.candidateEligibilityReason}</p>
+        ) : null}
       </Card>
 
       <PaymentBasisNotice loan={loan} paymentBasis={paymentBasis} />

@@ -32,6 +32,7 @@ export const defaultLoanProfile: LoanProfile = {
   nextPaymentDate: "2026-05-27",
   nextPaymentAmount: 86689,
   cancerInsuranceType: "がん100%込み",
+  desiredInsuranceCoverage: "cancer100",
   updatedAt: "2026-05-06T00:00:00.000+09:00",
 };
 

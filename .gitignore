@@ -1,9 +1,12 @@
 node_modules/
 dist/
 .vite/
+.wrangler/
+.dev.vars
 *.log
 *.local
 tsconfig.tsbuildinfo
+worker/worker-configuration.d.ts
 
 out/*
 !out/.gitkeep
