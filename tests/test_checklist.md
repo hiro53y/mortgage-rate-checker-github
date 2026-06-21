@@ -31,7 +31,8 @@
 - [x] `deliverables/mortgage-rate-checker-github/` の `npx tsc -b`
 - [ ] `deliverables/mortgage-rate-checker-github/` の `npm run build`（同じ実行環境制限）
 - [ ] ローカルViteのスマホ/デスクトップ画面確認（同じ実行環境制限）
-- [ ] 本番KV ID設定、Worker/Pagesデプロイ、公開URLのv7反映確認
+- [x] GitHub `main` へv7をPushし、Cloudflare Pages公開URLでv7反映を確認
+- [ ] 本番KV ID設定と独立Cron Workerデプロイ
 
 ## 2026-06-13
 

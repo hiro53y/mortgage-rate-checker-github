@@ -28,21 +28,23 @@
 - Wrangler 4.103.0: `npm run worker:check` 成功
 - 公式実レスポンス確認: 住信SBI JSONP、PayPay API、SBI新生APIがHTTP 200
 - `deliverables/mortgage-rate-checker-github/`: `npm test`、`npx tsc -b`、各 `node --check` 成功
+- GitHub `main` へ v7 をCommit/Push済み（`1ecfe1c`）
+- Cloudflare Pages公開URLでJSの `2026/06/21 v7` とService Workerの `mortgage-rate-checker-v7-20260621` を確認
 
 ## 未完了
 
 - `npm run build` はこの実行環境でVite/esbuildの子プロセス起動が `spawn EPERM` となり未完了。ルートの既存 `dist` 削除もOneDriveの `EPERM` になる
 - ローカルVite画面確認は同じ子プロセス起動制限により未実施
 - `worker/wrangler.jsonc` のKV IDはプレースホルダー。本番namespace IDへの置換とPages Dashboardへの同namespaceバインドが必要
-- GitHub commit/push、Workerデプロイ、Cloudflare Pages再デプロイ、公開URLのv7確認は未実施
+- 独立Cron Workerのデプロイは未実施
 - 公式構造化アダプタがない銀行は、現段階では公式HTML診断値または価格.com参考値であり推薦対象外
 
 ## 次にやること
 
 - [金利取得Worker手順](rate-worker.md)に従いKV namespaceを作成し、Worker設定のID置換とPages Dashboardバインドを行う
 - ローカル端末でルートと成果物の `npm run build` を実行する
-- `deliverables/mortgage-rate-checker-github/` をCommit/Pushし、WorkerとPagesをデプロイする
-- 公開画面で `更新: 2026/06/21 v7`、取得元、適用年月、条件適合金利を公式表示と照合する
+- 独立Cron Workerをデプロイする
+- 公開画面で取得元、適用年月、条件適合金利を公式表示と照合する
 
 ## 2026-06-13 v6 追加対応
 
