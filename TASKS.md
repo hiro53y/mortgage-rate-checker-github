@@ -6,7 +6,6 @@
 
 ## 作業中
 
-- [ ] v8をGitHubへPushし、Cloudflare Pagesの公開APIと画面反映を確認する
 - [ ] 本番KV IDを設定し、独立Cron Workerをデプロイする（未設定時のライブ取得フォールバックは実装済み）
 
 ## 完了
@@ -31,3 +30,4 @@
 - [x] v7の実レスポンスfixture、推薦除外、旧localStorage移行、部分失敗・KVロック回帰テストを追加する
 - [x] v8で公開GETの1101、住信SBI JSONP、公式失敗時フォールバック、総合サイト誤抽出を修正する
 - [x] 価格.com銀行別ページとダイヤモンド当月表を照合し、取得元・照合状態を比較画面へ表示する
+- [x] v8をGitHubへPushし、Cloudflare Pagesの画面・Service Worker・GET/POST APIを公開検証する

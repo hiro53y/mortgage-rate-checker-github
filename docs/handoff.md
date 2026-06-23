@@ -25,17 +25,18 @@
 - ルート: `npm test` 成功（52件）
 - ルート: `npx tsc -b` 成功
 - ルート: Functions/Workerの `node --check` 成功
-- 2026年06月24日実ページ: 13/13銀行で金利値取得、公式3、複数照合8、単一参考2
+- 2026年06月24日ローカル実ページ: 13/13銀行で金利値取得、公式3、複数照合8、単一参考2
+- Cloudflare Pages公開GET/POST: HTTP 200、schema 8、13/13銀行で値取得、公式3、複数照合5、単一参考5
+- GitHub `main` とCloudflare Pages公開版へv8反映済み（アプリ修正 `5e1bb50`、再実行 `6f028b7`、UTC compatibility date修正 `49290a5`）
+- 公開バンドルの `2026/06/24 v8` とService Worker `mortgage-rate-checker-v8-20260624` を確認
 - ローカル `npm run build` とWrangler dry-runはコードエラーではなく、この実行環境の全子プロセス起動に対する `spawn EPERM` で未完了
 
 ## 未完了
 
-- GitHub `main` へのv8 PushとCloudflare Pages公開反映確認
 - 本番KV ID設定と独立Cron Workerデプロイ。未設定でもライブ取得は動作するが、初回表示が外部サイト応答時間に依存する
 
 ## 次にやること
 
-- GitHub公開用成果物へ同期してPushし、Pagesのビルドと `/api/rates` GET/POSTを確認する
 - 安定した定期キャッシュ運用には本番KVとCron Workerを設定する
 
 ## 2026-06-21 v7 追加対応

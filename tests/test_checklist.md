@@ -23,8 +23,8 @@
 - [ ] ルート `npm run build`（Viteの子プロセス起動が環境制限 `spawn EPERM`）
 - [ ] ルート `npm run worker:check`（Wranglerの子プロセス起動が環境制限 `spawn EPERM`）
 - [x] `deliverables/mortgage-rate-checker-github/` の自動テスト・型検査
-- [ ] GitHub `main` へv8をPushし、Cloudflare Pagesのv8反映を確認
-- [ ] 公開 `/api/rates` GET/POSTで13銀行の取得結果を確認
+- [x] GitHub `main` へv8をPushし、Cloudflare Pagesのv8反映を確認
+- [x] 公開 `/api/rates` GET/POSTで13/13銀行の取得結果を確認（公式3、複数照合5、単一参考5）
 - [ ] 本番KV ID設定と独立Cron Workerデプロイ
 
 ## 2026-06-21 v7
