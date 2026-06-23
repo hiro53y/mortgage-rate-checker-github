@@ -7,6 +7,20 @@ import {
 } from "../functions/api/rates.js";
 
 describe("rate extraction", () => {
+  it("変動金利の明示値を固定金利の引下げ幅より優先する", () => {
+    assert.equal(
+      extractRate(
+        "<p>YCG住宅ローン 変動金利 年0.950%</p><p>固定金利選択時は年1.80%引下げ</p>",
+        {
+          bankName: "もみじ銀行",
+          preferredKeywords: ["変動", "住宅ローン"],
+          expectedVariableRateRange: [0.4, 2.5],
+        },
+      ),
+      0.95,
+    );
+  });
+
   it("prefers mortgage variable-rate context over insurance add-on rates", () => {
     const html = `
       <main>

@@ -2,6 +2,7 @@ import { getCachedRates, jsonResponse, refreshAllRates } from "./rateService.js"
 import {
   extractRate as extractRateV7,
   extractRateFromAggregate as extractRateFromAggregateV7,
+  getJstMonthKey,
   getRateUrls as getRateUrlsV7,
   normalizeText as normalizeTextV7,
 } from "./rateAdapters.js";
@@ -740,18 +741,31 @@ export {
 };
 
 export async function onRequestGet(context) {
-  const cached = await getCachedRates(context.env);
-  if (cached) return jsonResponse(cached);
-  return jsonResponse({
-    schemaVersion: 7,
-    month: getMonthKey(new Date()),
-    fetchedAt: new Date().toISOString(),
-    items: [],
-    cached: false,
-    locked: false,
-    message:
-      "金利キャッシュがまだありません。Cron Workerの初回実行後に表示されます。今すぐ確認する場合は「再取得」を押してください。",
-  });
+  try {
+    const cached = await getCachedRates(context.env);
+    if (cached) return jsonResponse(cached);
+    return jsonResponse(
+      await refreshAllRates(context.env, {
+        date: new Date(),
+        bypassLock: !context.env?.RATE_CACHE,
+      }),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        message: "rate cache miss refresh failed",
+        month: getJstMonthKey(new Date()),
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return jsonResponse(
+      {
+        error: "金利取得に失敗しました。時間をおいて再取得してください。",
+        month: getJstMonthKey(new Date()),
+      },
+      502,
+    );
+  }
 }
 
 export async function onRequestPost(context) {

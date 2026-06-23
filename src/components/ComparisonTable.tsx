@@ -45,6 +45,24 @@ const eligibilityLabels = {
   unknown: "条件不足",
 };
 
+const confidenceLabels = {
+  verified: "公式構造化データ",
+  corroborated: "複数情報源で一致",
+  review: "単一情報源・要確認",
+  failed: "取得失敗",
+};
+
+function getEvidenceSourceLabel(row: BankComparisonRow) {
+  const labels = (row.rateOffer?.evidence ?? []).map((evidence) => {
+    if (evidence.sourceKind === "official-api") return "公式API";
+    if (evidence.sourceUrl.includes("kakaku.com")) return "価格.com";
+    if (evidence.sourceUrl.includes("diamond-fudosan.jp")) return "ダイヤモンド不動産";
+    if (evidence.sourceKind === "official-html") return "公式サイト";
+    return "参考サイト";
+  });
+  return [...new Set(labels)].join("・") || "なし";
+}
+
 export function ComparisonTable({
   rows,
   sources,
@@ -161,6 +179,11 @@ export function ComparisonTable({
                       label="取得元"
                       value={row.sourceKind ? sourceLabels[row.sourceKind] : "未取得"}
                     />
+                    <InfoRow
+                      label="照合状態"
+                      value={row.confidence ? confidenceLabels[row.confidence] : "未確認"}
+                    />
+                    <InfoRow label="照合元" value={getEvidenceSourceLabel(row)} />
                     <InfoRow
                       label="適合状態"
                       value={eligibilityLabels[row.eligibility ?? "unknown"]}
@@ -395,6 +418,12 @@ export function ComparisonTable({
                   </p>
                   <p className="mt-1 text-xs font-semibold text-slate-700">
                     {eligibilityLabels[row.eligibility ?? "unknown"]}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {row.confidence ? confidenceLabels[row.confidence] : "未確認"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    照合元: {getEvidenceSourceLabel(row)}
                   </p>
                 </td>
                 <td className="px-3 py-3">

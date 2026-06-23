@@ -86,6 +86,7 @@ export type BankRateSource = {
   apiUrl?: string;
   backupApiUrl?: string;
   referenceUrl?: string;
+  kakakuCompanyCode?: string;
   rateUrls?: string[];
   aggregateAliases?: string[];
   preferredKeywords?: string[];
@@ -99,7 +100,7 @@ export type RateSourceKind =
   | "aggregator"
   | "manual-verified";
 
-export type RateConfidence = "verified" | "review" | "failed";
+export type RateConfidence = "verified" | "corroborated" | "review" | "failed";
 export type RateEligibility = "eligible" | "conditional" | "ineligible" | "unknown";
 
 export type RateOption = {
@@ -112,6 +113,14 @@ export type RateOption = {
   requiresSbiHyper?: boolean;
   maxBorrowerAge?: number;
   maxRemainingMonths?: number;
+};
+
+export type RateEvidence = {
+  sourceKind: Exclude<RateSourceKind, "manual-verified">;
+  sourceUrl: string;
+  rate: number;
+  applicableMonth: string;
+  label: string;
 };
 
 export type RateOffer = {
@@ -137,6 +146,7 @@ export type RateOffer = {
   failureReason?: string;
   adapterId: string;
   rateOptions: RateOption[];
+  evidence?: RateEvidence[];
 };
 
 export type ManualRateVerification = {

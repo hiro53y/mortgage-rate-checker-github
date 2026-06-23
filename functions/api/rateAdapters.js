@@ -1,9 +1,11 @@
 import { BANK_RATE_SOURCES } from "../../shared/bankRateSources.js";
 
-const FETCH_TIMEOUT_MS = 12000;
+const FETCH_TIMEOUT_MS = 8000;
+const OFFICIAL_HTML_TIMEOUT_MS = 6000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const KAKAKU_URL =
   "https://s.kakaku.com/housing-loan/ranking.asp?hl_ltype=1&utm_source=mortgage-rate-checker";
+const CORROBORATION_TOLERANCE = 0.15;
 
 const REQUEST_HEADERS = {
   accept: "text/html,application/json,text/javascript,*/*;q=0.8",
@@ -86,15 +88,24 @@ function baseOffer(source, fetchedAt, applicableMonth, sourceUrl, sourceKind) {
     failureReason: undefined,
     adapterId: source.adapter,
     rateOptions: [],
+    evidence: [],
   };
 }
 
-export function parseNetbkJsonp(text, source, fetchedAt, date = new Date()) {
-  const cleaned = text
+function normalizeJsonpObject(text) {
+  let cleaned = text
     .replace(/^\uFEFF/, "")
     .replace(/^\s*[\w$]+\s*\(/, "")
     .replace(/\)\s*;?\s*$/, "")
-    .replace(/,\s*([}\]])/g, "$1");
+    .replace(/\bundefined\b|\bNaN\b/g, "null");
+  while (/\[\s*,|,\s*,/.test(cleaned)) {
+    cleaned = cleaned.replace(/\[\s*,/g, "[null,").replace(/,\s*,/g, ",null,");
+  }
+  return cleaned.replace(/,\s*([}\]])/g, "$1");
+}
+
+export function parseNetbkJsonp(text, source, fetchedAt, date = new Date()) {
+  const cleaned = normalizeJsonpObject(text);
   const payload = JSON.parse(cleaned);
   const standard = asPercent(payload?.full?.floatRe?.[0] ?? payload?.full?.float?.[0]);
   const ltv80 = asPercent(payload?.full?.floatReCp?.[0] ?? payload?.full?.floatCp?.[0]);
@@ -113,6 +124,15 @@ export function parseNetbkJsonp(text, source, fetchedAt, date = new Date()) {
   offer.rateOptions = [
     { id: "ltv-80-or-less", label: "融資率80%以下", rate: ltv80, ltvMax: 0.8 },
     { id: "ltv-over-80", label: "融資率80%超", rate: standard, ltvMinExclusive: 0.8 },
+  ];
+  offer.evidence = [
+    {
+      sourceKind: "official-api",
+      sourceUrl: source.apiUrl,
+      rate: offer.advertisedMinRate,
+      applicableMonth: offer.applicableMonth,
+      label: "住信SBI公式JSONP",
+    },
   ];
   return offer;
 }
@@ -139,6 +159,15 @@ export function parsePayPayRateJson(payload, source, fetchedAt, date = new Date(
   offer.conditionsSummary =
     "公式APIの借換え・変動金利。団信プラン、審査結果、物件条件による上乗せは公式確認が必要。";
   offer.rateOptions = [{ id: "refinance-variable", label: "借換え変動金利", rate }];
+  offer.evidence = [
+    {
+      sourceKind: "official-api",
+      sourceUrl: source.apiUrl,
+      rate,
+      applicableMonth,
+      label: "PayPay銀行公式API",
+    },
+  ];
   return offer;
 }
 
@@ -167,6 +196,15 @@ export function parseSbiShinseiJson(payload, source, fetchedAt) {
       ? [{ id: "sbi-hyper", label: "SBIハイパー預金利用", rate: sbiHyper, requiresSbiHyper: true }]
       : []),
   ];
+  offer.evidence = [
+    {
+      sourceKind: "official-api",
+      sourceUrl,
+      rate: offer.advertisedMinRate,
+      applicableMonth: offer.applicableMonth,
+      label: "SBI新生銀行公式API",
+    },
+  ];
   return offer;
 }
 
@@ -193,17 +231,162 @@ function findRatesNearAlias(text, aliases) {
   return values;
 }
 
+function getKakakuPlanCards(html) {
+  return html
+    .split(/<li\s+class=["'][^"']*p-planSearchList_item[^"']*["'][^>]*>/i)
+    .slice(1);
+}
+
+function getMonthFromKakakuCard(text) {
+  const match = text.match(/(20\d{2})\/(0?[1-9]|1[0-2])\/\d{1,2}\s*時点/);
+  return match ? `${match[1]}-${String(match[2]).padStart(2, "0")}` : null;
+}
+
 export function parseKakakuShiftJis(bytes, source, fetchedAt, date = new Date()) {
-  const text = decodeShiftJis(bytes);
-  const rates = findRatesNearAlias(text, source.aggregateAliases ?? [source.bankName]);
-  if (rates.length === 0) return null;
-  const offer = baseOffer(source, fetchedAt, getJstMonthKey(date), KAKAKU_URL, "aggregator");
-  offer.advertisedMinRate = Math.min(...rates);
+  const html = decodeShiftJis(bytes);
+  const currentMonth = getJstMonthKey(date);
+  const aliases = source.aggregateAliases ?? [source.bankName];
+  const candidates = getKakakuPlanCards(html)
+    .map((card) => normalizeText(card))
+    .filter(
+      (card) =>
+        aliases.some((alias) => card.includes(alias)) &&
+        /借り換え|借換/.test(card) &&
+        /変動金利/.test(card),
+    )
+    .map((card) => {
+      const rateMatch = card.match(/変動金利.{0,100}?年\s*([0-9]+(?:\.[0-9]{1,3})?)\s*%/);
+      return {
+        rate: rateMatch ? Number(rateMatch[1]) : NaN,
+        month: getMonthFromKakakuCard(card),
+        label: card.slice(0, 180),
+      };
+    })
+    .filter(
+      (item) =>
+        Number.isFinite(item.rate) &&
+        item.month === currentMonth &&
+        item.rate >= source.expectedVariableRateRange[0] &&
+        item.rate <= source.expectedVariableRateRange[1],
+    )
+    .sort((a, b) => a.rate - b.rate);
+  const fallbackRates =
+    candidates.length === 0 ? findRatesNearAlias(html, aliases) : [];
+  const selected = candidates[0] ??
+    (fallbackRates.length > 0
+      ? { rate: Math.min(...fallbackRates), month: currentMonth, label: "価格.com参考値" }
+      : null);
+  if (!selected) return null;
+  const offer = baseOffer(source, fetchedAt, selected.month, KAKAKU_URL, "aggregator");
+  offer.advertisedMinRate = selected.rate;
   offer.confidence = "review";
-  offer.conditionsSummary = "価格.com掲載値。公式の商品・借換え・団信条件との一致確認が必要。";
+  offer.conditionsSummary =
+    "価格.comの借り換えランキングから、当月の変動金利カードを銀行名別に取得。団信・審査・優遇条件は要確認。";
   offer.failureReason = "総合サイト参考値のため自動推薦対象外";
   offer.rateOptions = [
     { id: "kakaku-reference", label: "価格.com参考値", rate: offer.advertisedMinRate },
+  ];
+  offer.evidence = [
+    {
+      sourceKind: "aggregator",
+      sourceUrl: KAKAKU_URL,
+      rate: offer.advertisedMinRate,
+      applicableMonth: offer.applicableMonth,
+      label: selected.label,
+    },
+  ];
+  return offer;
+}
+
+function getKakakuCompanyUrl(companyCode) {
+  return `https://s.kakaku.com/housing-loan/company.asp?CompanyCD=${companyCode}&hl_ltype=1`;
+}
+
+export function parseKakakuCompanyShiftJis(bytes, source, fetchedAt, date = new Date()) {
+  if (!source.kakakuCompanyCode) return null;
+  const text = normalizeText(decodeShiftJis(bytes));
+  const currentMonth = getJstMonthKey(date);
+  const dateMatches = [...text.matchAll(/(20\d{2})\/(0?[1-9]|1[0-2])\/\d{1,2}\s*時点/g)];
+  if (dateMatches.length > 0 && !dateMatches.some((match) => `${match[1]}-${String(match[2]).padStart(2, "0")}` === currentMonth)) {
+    return null;
+  }
+  const [min, max] = source.expectedVariableRateRange;
+  const rates = [
+    ...text.matchAll(
+      /(?:借り換えローン|借り換え\)|借り換え】|借り換え)[^%]{0,180}?変動(?:\s+変動金利)?\s+金利\s+年\s*([0-9]+(?:\.[0-9]{1,3})?)\s*%/g,
+    ),
+  ]
+    .map((match) => Number(match[1]))
+    .filter((rate) => rate >= min && rate <= max)
+    .sort((a, b) => a - b);
+  if (rates.length === 0) return null;
+
+  const sourceUrl = getKakakuCompanyUrl(source.kakakuCompanyCode);
+  const offer = baseOffer(source, fetchedAt, currentMonth, sourceUrl, "aggregator");
+  offer.advertisedMinRate = rates[0];
+  offer.confidence = "review";
+  offer.conditionsSummary =
+    "価格.comの銀行別ページから、当月の借り換え変動金利を取得。複数商品がある場合は表示下限を採用。団信・審査・優遇条件は要確認。";
+  offer.failureReason = "総合サイト参考値のため自動推薦対象外";
+  offer.rateOptions = [
+    { id: "kakaku-company-reference", label: "価格.com銀行別借換え金利", rate: rates[0] },
+  ];
+  offer.evidence = [
+    {
+      sourceKind: "aggregator",
+      sourceUrl,
+      rate: rates[0],
+      applicableMonth: currentMonth,
+      label: "価格.com 銀行別借換え商品",
+    },
+  ];
+  return offer;
+}
+
+export function parseDiamondArticleHtml(html, source, fetchedAt, date = new Date()) {
+  const currentMonth = getJstMonthKey(date);
+  const currentSlashMonth = currentMonth.replace("-", "/");
+  const currentJapaneseMonth = `${Number(currentMonth.slice(0, 4))}年${Number(currentMonth.slice(5))}月`;
+  const text = normalizeText(html);
+  const title = normalizeText(html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  const aliases = source.aggregateAliases ?? [source.bankName];
+  if (!aliases.some((alias) => title.includes(alias)) || !/住宅ローン/.test(title)) return null;
+  if (!text.includes(currentSlashMonth) && !text.includes(currentJapaneseMonth)) return null;
+
+  const titleRate = Number(
+    title.match(/金利は\s*([0-9]+(?:\.[0-9]{1,3})?)\s*%\s*\(変動/)?.[1],
+  );
+  const rowMatch = text.match(
+    new RegExp(`${currentSlashMonth.replace("/", "\\/")}\\s+([\\s\\S]{0,240}?)(?=20\\d{2}\\/(?:0[1-9]|1[0-2])|$)`),
+  );
+  const rowRates =
+    rowMatch
+      ? [...rowMatch[1].matchAll(/([0-9]+(?:\.[0-9]{1,3})?)\s*%/g)]
+          .map((match) => Number(match[1]))
+          .filter(
+            (rate) =>
+              rate >= source.expectedVariableRateRange[0] &&
+              rate <= source.expectedVariableRateRange[1],
+          )
+      : [];
+  const rate = Number.isFinite(titleRate) ? titleRate : Math.min(...rowRates);
+  if (!Number.isFinite(rate)) return null;
+
+  const offer = baseOffer(source, fetchedAt, currentMonth, source.referenceUrl, "aggregator");
+  offer.advertisedMinRate = rate;
+  offer.confidence = "review";
+  offer.conditionsSummary =
+    "ダイヤモンド不動産の銀行別ページに掲載された当月の変動金利下限。借換え商品・団信・優遇条件は要確認。";
+  offer.failureReason = "総合サイト参考値のため自動推薦対象外";
+  offer.rateOptions = [{ id: "diamond-reference", label: "ダイヤモンド不動産参考値", rate }];
+  offer.evidence = [
+    {
+      sourceKind: "aggregator",
+      sourceUrl: source.referenceUrl,
+      rate,
+      applicableMonth: currentMonth,
+      label: "ダイヤモンド不動産 銀行別ページ",
+    },
   ];
   return offer;
 }
@@ -227,6 +410,15 @@ export function parseHiroginDiamondHtml(html, source, fetchedAt, date = new Date
   offer.conditionsSummary = "ダイヤモンド不動産の最新月表。広島銀行公式ページで手動確認が必要。";
   offer.failureReason = "公式HTMLに金利表がないため自動推薦対象外";
   offer.rateOptions = [{ id: "diamond-reference", label: "総合サイト参考値", rate: row.rate }];
+  offer.evidence = [
+    {
+      sourceKind: "aggregator",
+      sourceUrl: source.referenceUrl,
+      rate: row.rate,
+      applicableMonth: row.month,
+      label: "ダイヤモンド不動産 最新月表",
+    },
+  ];
   return offer;
 }
 
@@ -247,12 +439,20 @@ export function getRateUrls(source) {
 
 export function extractRate(html, source = {}) {
   const text = normalizeText(html);
+  const [defaultMin, defaultMax] = source.expectedVariableRateRange ?? [0.2, 3.5];
+  const min = source.minExpectedRate ?? defaultMin;
+  const max = source.maxExpectedRate ?? defaultMax;
+  const explicitVariableRates = [
+    ...text.matchAll(/変動金利[^%]{0,100}?年\s*([0-9]+(?:\.[0-9]{1,3})?)\s*%/g),
+  ]
+    .map((match) => Number(match[1]))
+    .filter((rate) => rate >= min && rate <= max);
+  if (explicitVariableRates.length > 0) {
+    return Math.min(...explicitVariableRates);
+  }
   const candidates = [];
   for (const match of text.matchAll(/([0-9]+(?:\.[0-9]{1,3})?)\s*%/g)) {
     const rate = Number(match[1]);
-    const [defaultMin, defaultMax] = source.expectedVariableRateRange ?? [0.2, 3.5];
-    const min = source.minExpectedRate ?? defaultMin;
-    const max = source.maxExpectedRate ?? defaultMax;
     if (rate < min || rate > max) continue;
     const localPrefix = text.slice(Math.max(0, match.index - 24), match.index);
     const immediatePrefix = text.slice(Math.max(0, match.index - 18), match.index);
@@ -288,11 +488,16 @@ export function extractRateFromAggregate(html, source = {}) {
   return rates.length > 0 ? Math.min(...rates) : null;
 }
 
-async function fetchBounded(url, init, fetchImpl) {
+async function fetchBounded(
+  url,
+  init,
+  fetchImpl,
+  { attempts = 2, timeoutMs = FETCH_TIMEOUT_MS } = {},
+) {
   let lastError;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetchImpl(url, {
         ...init,
@@ -300,15 +505,39 @@ async function fetchBounded(url, init, fetchImpl) {
         redirect: "follow",
         signal: controller.signal,
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const error = new Error(`HTTP ${response.status}`);
+        error.retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+        throw error;
+      }
       const declaredLength = Number(response.headers.get("content-length") ?? 0);
       if (declaredLength > MAX_RESPONSE_BYTES) throw new Error("レスポンスが上限を超えました。");
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength > MAX_RESPONSE_BYTES) throw new Error("レスポンスが上限を超えました。");
+      if (!response.body) return new Uint8Array();
+      const reader = response.body.getReader();
+      const chunks = [];
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_RESPONSE_BYTES) {
+          await reader.cancel();
+          throw new Error("レスポンスが上限を超えました。");
+        }
+        chunks.push(value);
+      }
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
       return bytes;
     } catch (error) {
       lastError = error;
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
+      const canRetry = attempt + 1 < attempts && error?.retryable !== false;
+      if (canRetry) await new Promise((resolve) => setTimeout(resolve, 250));
+      else break;
     } finally {
       clearTimeout(timeout);
     }
@@ -322,11 +551,22 @@ function decodeUtf8(bytes) {
 
 export function createAdapterContext(fetchImpl = fetch) {
   let kakakuPromise;
+  const kakakuCompanyPromises = new Map();
   return {
     fetchImpl,
     getKakakuBytes() {
       kakakuPromise ??= fetchBounded(KAKAKU_URL, undefined, fetchImpl);
       return kakakuPromise;
+    },
+    getKakakuCompanyBytes(companyCode) {
+      if (!companyCode) return Promise.resolve(null);
+      if (!kakakuCompanyPromises.has(companyCode)) {
+        kakakuCompanyPromises.set(
+          companyCode,
+          fetchBounded(getKakakuCompanyUrl(companyCode), undefined, fetchImpl),
+        );
+      }
+      return kakakuCompanyPromises.get(companyCode);
     },
   };
 }
@@ -361,45 +601,122 @@ async function fetchStructuredOffer(source, fetchedAt, date, context) {
 }
 
 async function fetchDiagnosticOfficialHtml(source, fetchedAt, date, context) {
-  let lastError;
-  for (const url of source.rateUrls.slice(0, 2)) {
-    try {
-      const bytes = await fetchBounded(url, undefined, context.fetchImpl);
+  const results = await Promise.allSettled(
+    source.rateUrls.slice(0, 2).map(async (url) => {
+      const bytes = await fetchBounded(url, undefined, context.fetchImpl, {
+        attempts: 1,
+        timeoutMs: OFFICIAL_HTML_TIMEOUT_MS,
+      });
       const rate = extractRate(decodeUtf8(bytes), source);
-      if (rate === null) continue;
+      if (rate === null) throw new Error(`${url}: 金利候補なし`);
       const offer = baseOffer(source, fetchedAt, getJstMonthKey(date), url, "official-html");
       offer.advertisedMinRate = rate;
       offer.confidence = "review";
       offer.conditionsSummary = "公式HTMLからの診断用候補値。商品・借換え・団信条件を確定できていません。";
       offer.failureReason = "汎用HTML診断値のため自動推薦対象外";
       offer.rateOptions = [{ id: "html-diagnostic", label: "公式HTML診断値", rate }];
+      offer.evidence = [
+        {
+          sourceKind: "official-html",
+          sourceUrl: url,
+          rate,
+          applicableMonth: offer.applicableMonth,
+          label: "公式HTML診断値",
+        },
+      ];
       return offer;
-    } catch (error) {
-      lastError = error;
+    }),
+  );
+  const offer = results.find((result) => result.status === "fulfilled")?.value;
+  if (offer) return offer;
+  const messages = results
+    .filter((result) => result.status === "rejected")
+    .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
+  throw new Error(messages.join(" / ") || "公式HTMLから金利を特定できませんでした。");
+}
+
+function getSettledValue(result) {
+  return result.status === "fulfilled" ? result.value : null;
+}
+
+function getEvidence(offers) {
+  return offers.flatMap((offer) => offer?.evidence ?? []);
+}
+
+function ratesAreClose(a, b) {
+  return Math.abs(a.advertisedMinRate - b.advertisedMinRate) <= CORROBORATION_TOLERANCE;
+}
+
+function selectBestOffer(structured, officialHtml, kakaku, diamond, extraOffers = []) {
+  const offers = [structured, officialHtml, kakaku, diamond, ...extraOffers].filter(Boolean);
+  if (structured) {
+    return {
+      ...structured,
+      evidence: getEvidence(offers),
+      conditionsSummary:
+        offers.length > 1
+          ? `${structured.conditionsSummary} 公式APIを優先し、${offers.length - 1}件の外部表示も照合しました。`
+          : structured.conditionsSummary,
+    };
+  }
+
+  const preferredReference = kakaku ?? diamond;
+  if (preferredReference) {
+    const corroborating = [officialHtml, kakaku, diamond].filter(
+      (offer) => offer && offer !== preferredReference && ratesAreClose(preferredReference, offer),
+    );
+    if (corroborating.length > 0) {
+      return {
+        ...preferredReference,
+        confidence: "corroborated",
+        evidence: getEvidence(offers),
+        conditionsSummary: `${preferredReference.conditionsSummary} 別情報源${corroborating.length}件と年${CORROBORATION_TOLERANCE.toFixed(3)}ポイント以内で一致しました。`,
+        failureReason: "複数情報源で照合済みですが、団信・審査・優遇条件は要確認です。",
+      };
     }
+    if (officialHtml) {
+      return {
+        ...officialHtml,
+        evidence: getEvidence(offers),
+        failureReason: "公式HTML候補とまとめサイト値に差があるため、商品条件の確認が必要です。",
+        conditionsSummary: `${officialHtml.conditionsSummary} まとめサイト値との差が年${CORROBORATION_TOLERANCE.toFixed(3)}ポイントを超えています。`,
+      };
+    }
+    return { ...preferredReference, evidence: getEvidence(offers) };
   }
-  try {
-    const kakakuBytes = await context.getKakakuBytes();
-    const reference = parseKakakuShiftJis(kakakuBytes, source, fetchedAt, date);
-    if (reference) return reference;
-  } catch (error) {
-    lastError = error;
-  }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("公式HTMLと価格.com参考ページから金利を特定できませんでした。");
+  return officialHtml ? { ...officialHtml, evidence: getEvidence(offers) } : null;
 }
 
 export async function fetchBankOffer(source, fetchedAt, date, context) {
-  const structured = await fetchStructuredOffer(source, fetchedAt, date, context);
-  if (structured) return structured;
-  if (source.adapter === "hirogin-diamond") {
-    const bytes = await fetchBounded(source.referenceUrl, undefined, context.fetchImpl);
-    const offer = parseHiroginDiamondHtml(decodeUtf8(bytes), source, fetchedAt, date);
-    if (!offer) throw new Error("広島銀行の最新月参考金利を特定できませんでした。");
-    return offer;
-  }
-  return fetchDiagnosticOfficialHtml(source, fetchedAt, date, context);
+  const results = await Promise.allSettled([
+    fetchStructuredOffer(source, fetchedAt, date, context),
+    fetchDiagnosticOfficialHtml(source, fetchedAt, date, context),
+    context
+      .getKakakuBytes()
+      .then((bytes) => parseKakakuShiftJis(bytes, source, fetchedAt, date)),
+    context
+      .getKakakuCompanyBytes(source.kakakuCompanyCode)
+      .then((bytes) => (bytes ? parseKakakuCompanyShiftJis(bytes, source, fetchedAt, date) : null)),
+    fetchBounded(source.referenceUrl, undefined, context.fetchImpl).then((bytes) =>
+      source.adapter === "hirogin-diamond"
+        ? parseHiroginDiamondHtml(decodeUtf8(bytes), source, fetchedAt, date)
+        : parseDiamondArticleHtml(decodeUtf8(bytes), source, fetchedAt, date),
+    ),
+  ]);
+  const rankingKakaku = getSettledValue(results[2]);
+  const companyKakaku = getSettledValue(results[3]);
+  const offer = selectBestOffer(
+    getSettledValue(results[0]),
+    getSettledValue(results[1]),
+    companyKakaku ?? rankingKakaku,
+    getSettledValue(results[4]),
+    companyKakaku && rankingKakaku ? [rankingKakaku] : [],
+  );
+  if (offer) return offer;
+  const messages = results
+    .filter((result) => result.status === "rejected")
+    .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
+  throw new Error(messages.join(" / ") || "公式ページとまとめサイトから金利を特定できませんでした。");
 }
 
 export { BANK_RATE_SOURCES, KAKAKU_URL };

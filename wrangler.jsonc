@@ -2,6 +2,6 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "mortgage-rate-checker-github",
   "pages_build_output_dir": "./dist",
-  "compatibility_date": "2026-06-21",
+  "compatibility_date": "2026-06-24",
   "compatibility_flags": ["nodejs_compat"]
 }

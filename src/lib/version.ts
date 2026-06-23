@@ -1,1 +1,1 @@
-export const APP_BUILD_LABEL = "2026/06/21 v7";
+export const APP_BUILD_LABEL = "2026/06/24 v8";
