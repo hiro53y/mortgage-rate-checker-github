@@ -61,10 +61,16 @@ function makeItem(source, fetchedAt, offer, lastGoodOffer, error) {
     };
   }
   const rate = offer.conditionMatchedRate ?? offer.advertisedMinRate ?? null;
-  const status =
-    offer.confidence === "verified" && offer.sourceKind !== "aggregator"
-      ? "success"
-      : "needs-review";
+  const status = ["verified", "corroborated"].includes(offer.confidence)
+    ? "success"
+    : "needs-review";
+  const attemptedUrls = [
+    ...(source.rateUrls ?? []),
+    source.apiUrl,
+    source.backupApiUrl,
+    source.referenceUrl,
+    ...(offer.evidence ?? []).map((evidence) => evidence.sourceUrl),
+  ].filter((url, index, values) => url && values.indexOf(url) === index);
   return {
     bankRateSourceId: source.id,
     bankName: source.bankName,
@@ -72,10 +78,12 @@ function makeItem(source, fetchedAt, offer, lastGoodOffer, error) {
     status,
     fetchedAt,
     sourceUrl: offer.sourceUrl,
-    attemptedUrls: source.rateUrls,
+    attemptedUrls,
     message:
       status === "success"
-        ? "公式構造化データから当月金利を取得しました。利用者条件の適合判定後に推薦可否を決めます。"
+        ? offer.confidence === "verified"
+          ? "公式構造化データから当月金利を取得しました。利用者条件の適合判定後に推薦可否を決めます。"
+          : "当月金利を複数情報源で照合しました。団信・審査・優遇条件は確認が必要です。"
         : offer.failureReason ?? "参考値または要確認値のため自動推薦対象外です。",
     offer,
     lastGoodOffer: lastGoodOffer ?? null,
@@ -163,14 +171,19 @@ export async function refreshAllRates(
       item.offer?.sourceKind !== "aggregator" &&
       item.offer?.applicableMonth === month,
   ).length;
+  const corroboratedCount = items.filter(
+    (item) =>
+      item.offer?.confidence === "corroborated" &&
+      item.offer?.applicableMonth === month,
+  ).length;
   const payload = {
-    schemaVersion: 7,
+    schemaVersion: 8,
     month,
     fetchedAt,
     items,
     cached: false,
     locked: false,
-    message: `${items.length}銀行を確認し、当月の公式構造化データを${officialCurrentCount}銀行で取得しました。参考値・要確認値は推薦に使用しません。`,
+    message: `${items.length}銀行を確認し、公式構造化データ${officialCurrentCount}銀行、複数情報源の照合値${corroboratedCount}銀行を取得しました。単一情報源の参考値は要確認です。`,
   };
   if (kv) {
     await kv.put(LATEST_PAYLOAD_KEY, JSON.stringify(payload));

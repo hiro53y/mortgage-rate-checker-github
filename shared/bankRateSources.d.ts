@@ -8,6 +8,7 @@ export type SharedBankRateSource = {
   apiUrl?: string;
   backupApiUrl?: string;
   referenceUrl?: string;
+  kakakuCompanyCode?: string;
   rateUrls: string[];
   aggregateAliases: string[];
   preferredKeywords: string[];
