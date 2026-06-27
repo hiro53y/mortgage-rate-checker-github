@@ -165,7 +165,7 @@ test("v9: 主系統が全失敗かつ前月履歴があればstaleとして表�
   assert.equal(kv.values.has("rates:history:2026-06:netbk"), false);
 });
 
-test("v10: schemaVersionは10を返し、staleと失敗のカウントがメッセージに含まれる", async () => {
+test("v11: schemaVersionは11を返し、staleと失敗のカウントがメッセージに含まれる", async () => {
   const kv = new FakeKv();
   const result = await refreshAllRates(
     { RATE_CACHE: kv },
@@ -177,7 +177,7 @@ test("v10: schemaVersionは10を返し、staleと失敗のカウントがメッ�
       bypassLock: true,
     },
   );
-  assert.equal(result.schemaVersion, 10);
+  assert.equal(result.schemaVersion, 11);
   assert.match(result.message, /前月履歴値の参考表示/);
   assert.match(result.message, /取得失敗/);
 });

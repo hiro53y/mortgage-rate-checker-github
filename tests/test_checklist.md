@@ -203,3 +203,29 @@
 
 - Windows/OneDrive配下では `dist` 削除やVite/esbuild起動が `EPERM` になる場合がある。必要に応じて権限付きで `npm run build` / `npm run dev` を実行する。
 - Cloudflare Pages Functions `/api/rates` はCloudflare環境での外部ページ取得が前提。ローカルVite単体ではAPIは存在しないため、画面側は失敗時に前回値/サンプル値へフォールバックする。
+
+## 2026-06-27 v11
+
+### 手入力推薦の緩和（自動テスト）
+- [x] 手入力+公式確認+applicableMonth当月 → 推薦対象
+- [x] 手入力+公式確認+applicableMonth前月 → 推薦対象（緩和仕様）
+- [x] 手入力+公式確認+applicableMonth未入力 → 推薦対象
+- [x] 手入力のみ（公式確認なし）→ 推薦対象外
+- [x] 手入力+公式確認だがhttp(非HTTPS) → 推薦対象外
+- [x] 基準行（rowKind=base）に手入力 → 推薦対象外
+- [x] recalculateComparisonRow で 手入力+公式確認 → eligibility=eligible
+- [x] recalculateComparisonRows で最低金利の手入力が推薦に選ばれる
+- [x] 手入力のみは推薦に選ばれず、公式条件適合行が推薦に選ばれる
+
+### 手動UIチェック（PWA）
+- [ ] 比較表で手入力金利を入力、「公式確認済み」チェック → 再判定 → ★マーク（推薦）が表示される
+- [ ] 「公式確認済み」のチェックなしで再判定 → ★マークは表示されず、参考表示のみになる
+- [ ] applicableMonth を前月にしても、公式確認チェックがあれば推薦対象になる
+- [ ] チェックボックス下の説明文が両方（モバイル/デスクトップ）で表示される
+- [ ] バッジに「公式確認済み手入力」と表示される
+
+### バージョン更新確認
+- [x] src/lib/version.ts → "2026/06/27 v11"
+- [x] public/sw.js → "mortgage-rate-checker-v11-20260627"
+- [x] functions/api/rateService.js → schemaVersion: 11
+- [x] tests/rateService.test.ts → schemaVersion: 11 確認テスト

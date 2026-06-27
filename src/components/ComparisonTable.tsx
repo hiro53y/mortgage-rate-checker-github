@@ -283,6 +283,9 @@ export function ComparisonTable({
                   />
                   公式ページで借換え・変動・団信条件を確認済み
                 </label>
+                <p className="text-[11px] leading-4 text-slate-500">
+                  チェックを入れて再判定すると、入力値が借換え推薦の対象になります（チェックなしは参考表示のみ）。
+                </p>
                 <div className="grid grid-cols-2 gap-2">
                   {source ? (
                     <Button
@@ -422,6 +425,9 @@ export function ComparisonTable({
                     />
                     公式確認済み
                   </label>
+                  <p className="mt-1 w-40 text-[11px] leading-4 text-slate-500">
+                    チェックすると借換え推薦の対象になります（チェックなしは参考表示のみ）。
+                  </p>
                   <p className="mt-1 text-xs text-slate-500">空欄なら自動/サンプル値</p>
                 </td>
                 <td className="px-3 py-3">

@@ -11,6 +11,12 @@
 
 ## 完了
 
+- [x] v11: 手入力上書きの推薦ロジックを緩和（公式確認チェック+HTTPS sourceUrlで推薦対象、applicableMonth任意化）
+- [x] v11: ComparisonTableに「公式確認済みチェックで推薦対象になる」説明文を追加（モバイル/デスクトップ）
+- [x] v11: rateEligibility/rateEstimation テストに 9 件追加。全 81 件パス
+- [x] v11: schemaVersion 11 / Service Worker / バージョン表示を更新
+- [x] v11: handoff・decision_log・test_checklistを更新
+
 - [x] v10: 「算定不可」表示を完全廃止し、3層金利推定フォールバック（公式条件適合 / aggregator参考値 / 広告下限+団信0.3% / 業界中央レンジ）を導入する
 - [x] v10: BankComparisonRow に `estimationTier` / `estimationLabel` を追加し、比較表に信頼度ラベルを表示する
 - [x] v10: 推定値（第2・3・4優先）は表示するが借換え推薦の対象外とする

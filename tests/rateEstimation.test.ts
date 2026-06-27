@@ -6,6 +6,7 @@ import {
   getEstimatedRate,
   isLatestFetchedCandidate,
   recalculateComparisonRow,
+  recalculateComparisonRows,
 } from "../src/lib/comparisonMath.ts";
 import type {
   BankComparisonRow,
@@ -233,6 +234,111 @@ test("recalculateComparisonRow：advertisedMinRate のみある場合は +0.3% �
   assert.equal(result.conditionMatchedRate, 0.92);
 });
 
+// ===== v11: 手入力推薦の end-to-end =====
+test("v11: recalculateComparisonRow で 手入力+公式確認 → eligibility=eligible & tier=official-condition-matched", () => {
+  const candidateRow: BankComparisonRow = {
+    id: "candidate-manual-verified",
+    rowKind: "candidate",
+    bankName: "中国銀行",
+    effectiveRate: 0.995,
+    insuranceLevel: "要確認",
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note: "test",
+    manualOverrideRate: 0.55,
+    manualApplicableMonth: "2026-05",
+    manualSourceUrl: "https://www.chugin.co.jp/rate",
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+  };
+  const result = recalculateComparisonRow(candidateRow, loan());
+  assert.equal(result.eligibility, "eligible");
+  assert.equal(result.estimationTier, "official-condition-matched");
+  assert.equal(result.estimationLabel, "公式確認済み手入力");
+  assert.equal(result.sourceKind, "manual-verified");
+  assert.equal(result.confidence, "verified");
+});
+
+test("v11: recalculateComparisonRows で 手入力公式確認済み行が最低金利なら推薦に選ばれる", () => {
+  const officialRow: BankComparisonRow = {
+    id: "official-row",
+    rowKind: "candidate",
+    bankName: "住信SBIネット銀行",
+    effectiveRate: 1.1,
+    rateOffer: baseOffer,
+    insuranceLevel: "がん100%",
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note: "test",
+  };
+  const manualRow: BankComparisonRow = {
+    id: "manual-row",
+    rowKind: "candidate",
+    bankName: "中国銀行",
+    effectiveRate: 0.995,
+    insuranceLevel: "がん100%",
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note: "test",
+    manualOverrideRate: 0.45,
+    manualApplicableMonth: "2026-06",
+    manualSourceUrl: "https://www.chugin.co.jp/rate",
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+  };
+  const baseRow: BankComparisonRow = {
+    id: "base-row",
+    rowKind: "base",
+    bankName: "もみじ銀行（現在条件）",
+    effectiveRate: 0.5,
+    insuranceLevel: "がん100%",
+    monthlyPayment: 0,
+    netBenefit: null,
+    isPriorityCandidate: false,
+    note: "test",
+  };
+  const results = recalculateComparisonRows([baseRow, officialRow, manualRow], loan());
+  const manualResult = results.find((r) => r.id === "manual-row");
+  const officialResult = results.find((r) => r.id === "official-row");
+  const baseResult = results.find((r) => r.id === "base-row");
+  assert.equal(manualResult?.isPriorityCandidate, true);
+  assert.equal(officialResult?.isPriorityCandidate, false);
+  assert.equal(baseResult?.isPriorityCandidate, false);
+});
+
+test("v11: 手入力のみ（公式確認なし）は推薦に選ばれず、公式条件適合行が推薦になる", () => {
+  const officialRow: BankComparisonRow = {
+    id: "official-row",
+    rowKind: "candidate",
+    bankName: "住信SBIネット銀行",
+    effectiveRate: 1.1,
+    rateOffer: baseOffer,
+    insuranceLevel: "がん100%",
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note: "test",
+  };
+  const unverifiedManualRow: BankComparisonRow = {
+    id: "manual-row-unverified",
+    rowKind: "candidate",
+    bankName: "中国銀行",
+    effectiveRate: 0.995,
+    insuranceLevel: "がん100%",
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note: "test",
+    manualOverrideRate: 0.45,
+  };
+  const results = recalculateComparisonRows([officialRow, unverifiedManualRow], loan({ desiredInsuranceCoverage: "standard" }));
+  const manualResult = results.find((r) => r.id === "manual-row-unverified");
+  const officialResult = results.find((r) => r.id === "official-row");
+  assert.equal(manualResult?.isPriorityCandidate, false);
+  assert.equal(officialResult?.isPriorityCandidate, true);
+});
+
 test("recalculateComparisonRow：算定不可状態でも月返済額が計算される", () => {
   const candidateRow: BankComparisonRow = {
     id: "candidate-without-offer",
@@ -246,7 +352,6 @@ test("recalculateComparisonRow：算定不可状態でも月返済額が計算�
     note: "test",
   };
   const result = recalculateComparisonRow(candidateRow, loan());
-  // 月返済額が 0 でなく現実的な値であること
   assert.ok(result.monthlyPayment > 0, "月返済額が必ず計算される");
   assert.ok(result.remainingTotalPayment !== undefined);
 });

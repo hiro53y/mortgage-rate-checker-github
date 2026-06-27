@@ -142,3 +142,93 @@ test("公式確認済み手入力だけを推薦候補にできる", () => {
   assert.equal(isLatestFetchedCandidate(manual, now), true);
   assert.equal(isLatestFetchedCandidate({ ...manual, manualVerifiedAt: undefined }, now), false);
 });
+
+// ===== v11: 手入力推薦の緩和ロジック =====
+test("v11: 手入力+公式確認+applicableMonth 当月 → 推薦対象", () => {
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  const manual = row({
+    rateOffer: undefined,
+    conditionMatchedRate: undefined,
+    manualOverrideRate: 0.82,
+    manualApplicableMonth: "2026-06",
+    manualSourceUrl: "https://bank.example/rate",
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+    sourceKind: "manual-verified",
+  });
+  assert.equal(isLatestFetchedCandidate(manual, now), true);
+});
+
+test("v11: 手入力+公式確認+applicableMonth 前月 → 推薦対象（緩和仕様）", () => {
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  const manual = row({
+    rateOffer: undefined,
+    conditionMatchedRate: undefined,
+    manualOverrideRate: 0.82,
+    manualApplicableMonth: "2026-05",
+    manualSourceUrl: "https://bank.example/rate",
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+    sourceKind: "manual-verified",
+  });
+  assert.equal(isLatestFetchedCandidate(manual, now), true);
+});
+
+test("v11: 手入力+公式確認+applicableMonth 未入力 → 推薦対象", () => {
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  const manual = row({
+    rateOffer: undefined,
+    conditionMatchedRate: undefined,
+    manualOverrideRate: 0.82,
+    manualApplicableMonth: undefined,
+    manualSourceUrl: "https://bank.example/rate",
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+    sourceKind: "manual-verified",
+  });
+  assert.equal(isLatestFetchedCandidate(manual, now), true);
+});
+
+test("v11: 手入力のみ（公式確認なし）→ 推薦対象外（参考表示のみ）", () => {
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  const manual = row({
+    rateOffer: undefined,
+    conditionMatchedRate: undefined,
+    manualOverrideRate: 0.82,
+    manualApplicableMonth: "2026-06",
+    manualSourceUrl: undefined,
+    manualVerifiedAt: undefined,
+    sourceKind: undefined,
+    eligibility: "unknown",
+  });
+  assert.equal(isLatestFetchedCandidate(manual, now), false);
+});
+
+test("v11: 手入力+公式確認だが sourceUrl が http (非HTTPS) → 推薦対象外", () => {
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  const manual = row({
+    rateOffer: undefined,
+    conditionMatchedRate: undefined,
+    manualOverrideRate: 0.82,
+    manualApplicableMonth: "2026-06",
+    manualSourceUrl: "http://bank.example/rate",
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+    sourceKind: "manual-verified",
+    eligibility: "unknown",
+  });
+  assert.equal(isLatestFetchedCandidate(manual, now), false);
+});
+
+test("v11: 基準行（rowKind=base）に手入力しても推薦対象外", () => {
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  const baseRow = row({
+    rowKind: "base",
+    bankName: "もみじ銀行（現在条件）",
+    rateOffer: undefined,
+    conditionMatchedRate: undefined,
+    manualOverrideRate: 0.5,
+    manualApplicableMonth: "2026-06",
+    manualSourceUrl: "https://momijibank.co.jp/rate",
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+    sourceKind: "manual-verified",
+    netBenefit: null,
+  });
+  assert.equal(isLatestFetchedCandidate(baseRow, now), false);
+});

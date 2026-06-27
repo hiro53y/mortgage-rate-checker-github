@@ -1,5 +1,53 @@
 # 引き継ぎメモ
 
+
+
+## 2026-06-27 v11 手入力推薦の緩和とデバッグ強化
+
+### 課題
+手入力上書きが借換え推薦の対象になっていなかった。
+`isLatestFetchedCandidate` が当月一致を厳格にチェックしていたため、
+手入力した値が当月と完全一致でない（例：前月の入力）と推薦対象から外れていた。
+
+### 対応
+1. **`isLatestFetchedCandidate`（src/lib/comparisonMath.ts）**
+   - 手入力 + 公式確認チェック + HTTPS sourceUrl の3条件のみで推薦対象に。
+   - `manualApplicableMonth === currentMonth` の厳格チェックを廃止。
+   - 公式確認なしの手入力は引き続き推薦対象外（参考表示のみ）。
+
+2. **`recalculateComparisonRow`**
+   - `hasVerifiedManual` も applicableMonth 任意に緩和。
+   - 公式確認済み手入力時は estimationTier を "official-condition-matched" に上書き、
+     ラベルを "公式確認済み手入力" として表示。
+
+3. **`ComparisonTable.tsx`**
+   - 公式確認済みチェックの近くに、
+     「チェックを入れて再判定すると、入力値が借換え推薦の対象になります」
+     という説明文を追加（モバイル・デスクトップ両方）。
+
+4. **テスト追加（9件）**
+   - tests/rateEligibility.test.ts に6件（緩和・基準行除外・http拒否）
+   - tests/rateEstimation.test.ts に3件（end-to-end の手入力選択）
+
+5. **バージョン更新**
+   - src/lib/version.ts: 2026/06/27 v11
+   - public/sw.js: mortgage-rate-checker-v11-20260627
+   - functions/api/rateService.js: schemaVersion: 11
+
+### 推薦対象の優先順位（v11確定）
+1. 手入力上書き + 公式確認済み（applicableMonth は任意）
+2. 公式条件適合（rateOffer + 当月確認 + verified confidence）
+3. 公式確認なし手入力 → 推薦対象外、参考表示のみ
+4. 推定値（aggregator/+0.3/中央レンジ）→ 推薦対象外
+
+### 検証結果
+- npm test: 81/81 pass（v10 の 72 から 9 件増）
+- npx tsc -b: クリーン
+- node --check: rateAdapters/rateService/rates/worker すべてOK
+
+### 次の改善候補
+- ServiceWorker の自動更新通知（v11リリース時にユーザーに通知）
+- 「公式確認済み手入力」の手入力日 (manualVerifiedAt) が古い場合の警告
 ## 2026-06-26 v10 「算定不可」廃止と3層金利推定フォールバック
 
 ## 現在の状況

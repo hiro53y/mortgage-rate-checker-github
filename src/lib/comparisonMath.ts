@@ -134,11 +134,13 @@ export function getRateStatus(row: BankComparisonRow): NonNullable<BankCompariso
 
 export function isLatestFetchedCandidate(row: BankComparisonRow, date = new Date()): boolean {
   if (isBaseComparisonRow(row) || row.eligibility !== "eligible") return false;
-  const currentMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  // v11: 手入力 + 公式確認済みの場合は推薦対象とする。
+  // - applicableMonth は当月厳格チェックを廃止（前月の値でも公式確認済みなら採用）
+  // - sourceUrl の HTTPS 要件は維持（証跡として最低限必要）
+  // - 「手入力のみ（公式確認なし）」は manualVerifiedAt が空のため不採用。
   const verifiedManual =
     row.manualOverrideRate !== undefined &&
     Boolean(row.manualVerifiedAt) &&
-    row.manualApplicableMonth === currentMonth &&
     Boolean(row.manualSourceUrl?.startsWith("https://"));
   if (verifiedManual) return true;
   // 推定値（第3・4優先）は推薦対象外。
@@ -210,10 +212,11 @@ export function recalculateComparisonRow(
   const offerEvaluation = row.rateOffer
     ? evaluateRateOfferForLoan(row.rateOffer, loan, paymentBasis.todayIsoDate)
     : null;
+  // v11: hasVerifiedManual は「手入力値 + 公式確認チェック + sourceUrl」で成立する。
+  //      applicableMonth は任意（あれば表示に使う、なくても推薦対象から外さない）。
   const hasVerifiedManual =
     row.manualOverrideRate !== undefined &&
     Boolean(row.manualVerifiedAt) &&
-    Boolean(row.manualApplicableMonth) &&
     Boolean(row.manualSourceUrl);
 
   // 3層フォールバックで「条件適合金利」を必ず確定する。
@@ -243,16 +246,20 @@ export function recalculateComparisonRow(
         : row.rateOffer,
     advertisedMinRate: row.rateOffer?.advertisedMinRate ?? row.advertisedMinRate,
     conditionMatchedRate: finalConditionMatchedRate,
-    estimationTier: estimation.tier,
-    estimationLabel: estimation.label,
+    // v11: 手入力+公式確認済みのときは推薦対象に並ぶため、
+    //      tier は「公式条件適合」相当として扱い、ラベルも手入力であることを明示する。
+    estimationTier: hasVerifiedManual ? "official-condition-matched" : estimation.tier,
+    estimationLabel: hasVerifiedManual ? "公式確認済み手入力" : estimation.label,
     sourceKind: hasVerifiedManual ? "manual-verified" : row.rateOffer?.sourceKind,
     confidence: hasVerifiedManual ? "verified" : row.rateOffer?.confidence,
     eligibility: hasVerifiedManual ? "eligible" : (offerEvaluation?.eligibility ?? "unknown"),
     eligibilityReason: hasVerifiedManual
-      ? "公式URL・確認日・適用年月を登録した手入力値"
+      ? row.manualApplicableMonth
+        ? `公式URL・確認日・適用年月（${row.manualApplicableMonth}）を登録した手入力値`
+        : "公式URL・確認日を登録した手入力値"
       : (offerEvaluation?.reason ?? "取得条件がありません。"),
     applicableMonth: hasVerifiedManual
-      ? row.manualApplicableMonth
+      ? (row.manualApplicableMonth ?? row.rateOffer?.applicableMonth)
       : row.rateOffer?.applicableMonth,
   };
   const rate = getRateUsedForCalculation(derivedRow);
