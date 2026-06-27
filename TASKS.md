@@ -11,6 +11,11 @@
 
 ## 完了
 
+- [x] v10: 「算定不可」表示を完全廃止し、3層金利推定フォールバック（公式条件適合 / aggregator参考値 / 広告下限+団信0.3% / 業界中央レンジ）を導入する
+- [x] v10: BankComparisonRow に `estimationTier` / `estimationLabel` を追加し、比較表に信頼度ラベルを表示する
+- [x] v10: 推定値（第2・3・4優先）は表示するが借換え推薦の対象外とする
+- [x] v10: schemaVersion 10 / Service Worker / バージョン表示を更新
+- [x] v10: tests/rateEstimation.test.ts に13件のテストを追加。全72件パス
 - [x] v9: モゲチェック・ZUU・Wayback Machine・前月KV履歴・Browser Renderingの5系統フォールバックを実装する
 - [x] v9: UIで stale / failed 行の淡色化と当月手入力導線の強調を実装する
 - [x] v9: `docs/rate-worker.md` を Cloudflare ダッシュボード手順レベルに展開する

@@ -1,5 +1,66 @@
 # 引き継ぎメモ
 
+## 2026-06-26 v10 「算定不可」廃止と3層金利推定フォールバック
+
+## 現在の状況
+
+ユーザーから「比較表に『算定不可』が残るのを完全に廃止したい」「もみじ銀行から借換えするか判断するためのツールなので、推定値でも構わないので必ず金利と返済額を表示してほしい」との要望を受け、比較表の他行行において**条件適合金利が undefined にならない3層フォールバック**を導入した。
+
+第1優先＝公式条件適合金利、第2優先＝aggregator由来の参考値、第3優先＝広告下限 + 一律団信上乗せ (+0.3%) の推定値、第4優先＝銀行の `expectedVariableRateRange` 中央値の推定値、の4段階で必ず金利を埋める。表示時には「条件適合 / 参考値 / 推定値（団信込）/ 推定値（中央レンジ）」ラベルでユーザーに信頼度を開示する。
+
+借換え推薦（`isPriorityCandidate`）は引き続き第1優先（公式条件適合）と公式確認済み手入力に限定し、第2・3・4優先の値は表示はするが自動推薦には使わない。
+
+## 変更内容
+
+- `src/types.ts`
+  - `RateEstimationTier` 型を新設（`official-condition-matched` | `aggregator-reference` | `estimated-with-insurance` | `estimated-midrange`）
+  - `BankComparisonRow` に `estimationTier?` と `estimationLabel?` を追加
+- `src/lib/comparisonMath.ts`
+  - `INSURANCE_ADDON_ESTIMATE = 0.3`（がん100%団信込みに揃える業界平均上乗せ）を定義
+  - `getEstimatedRate(row, source?, conditionMatchedRate?)` を新設。3層フォールバックを通して必ず金利・tier・ラベルを返す
+  - `recalculateComparisonRow` で `conditionMatchedRate` が必ず埋まるよう変更（undefined の余地を排除）
+  - `isLatestFetchedCandidate` に推定値（第2・3・4優先）を除外するガードを追加
+- `src/components/ComparisonTable.tsx`
+  - `canShowCalculation` フラグを撤廃、「算定不可」表示を全廃
+  - 月返済・ボーナス返済・12年累計差は常に金額を表示
+  - 条件適合金利欄に tier ラベル（条件適合 / 参考値 / 推定値（団信込）/ 推定値（中央レンジ））を併記
+  - モバイル版・デスクトップ版どちらも対応
+- バージョン更新
+  - `src/lib/version.ts`: `2026/06/26 v10`
+  - `public/sw.js`: `mortgage-rate-checker-v10-20260626`
+  - `functions/api/rateService.js`: `schemaVersion: 10`
+
+## 追加テスト（tests/rateEstimation.test.ts: 13件）
+
+- 第1〜4優先の各フォールバックが期待通り発火することを検証
+- `INSURANCE_ADDON_ESTIMATE` が +0.3% であることを検証
+- 第3優先で `advertisedMinRate + 0.3` を返すことを検証
+- 第4優先で `expectedVariableRateRange` 中央値を返すことを検証
+- 第2・3・4優先が `isLatestFetchedCandidate` で false（推薦対象外）になることを検証
+- 第1優先が推薦対象になることを検証
+- `recalculateComparisonRow` で `conditionMatchedRate` が必ず埋まることを検証
+- 既存テストは `rateService.test.ts` の schemaVersion 期待値を 9 → 10 に追従
+
+## 検証
+
+- ルート: `npm test` 全72件パス（v9: 59件 + 新規13件）
+- ルート: `npx tsc -b` 成功
+- ルート: `node --check functions/api/{rateAdapters,rateService,rates}.js` および `worker/src/index.js` 成功
+- `deliverables/mortgage-rate-checker-github/`: 同一の検証パス
+
+## 未完了
+
+- ルート `npm run build` と `wrangler dry-run` はこの実行環境では未確認。ユーザー端末で実行する
+- `deliverables/mortgage-rate-checker-github/node_modules` に検証用の一時シンボリックリンクが残った可能性あり。実環境上は通常リンクではなく実体なので影響無いが、念のためエクスプローラで存在確認・削除を推奨
+
+## 次にやること
+
+1. `npm run build` を確認しデプロイ
+2. v10 の挙動を本番ページで目視確認（条件適合金利欄に tier ラベルが正しく付くか）
+3. 推定値（団信込み +0.3%）の妥当性を実際の業界平均と照合し、必要なら定数 `INSURANCE_ADDON_ESTIMATE` をチューニング
+
+---
+
 ## 2026-06-25 v9 取得不能の段階フォールバック強化
 
 ## 現在の状況
@@ -435,9 +496,4 @@ UI側では `stale`（前月値）と `failed`（取得失敗）の行を淡色�
 
 - Codex実行ポリシーにより、Vite dev serverのバックグラウンド常駐起動はブロックされた
 - 添付画像は指定パスで読めなかったため、プロンプト本文のUI指定を優先した
-- Cloudflare KV `RATE_CACHE` は任意。未設定でもAPIは動くが、当月取得結果のサーバー側共有キャッシュは効かない
-
-## 次にやること
-
-- ブラウザで `npm run dev` を起動し、スマホ幅で最終目視確認する
-- Cloudflare Pagesで `npm run build` / `dist` を指定して公開する
+- Cloudflare KV `RATE_CACHE` は任意。未設定で�

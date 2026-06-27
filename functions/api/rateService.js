@@ -211,7 +211,7 @@ export async function refreshAllRates(
   const staleCount = items.filter((item) => item.status === "stale").length;
   const failedCount = items.filter((item) => item.status === "failed").length;
   const payload = {
-    schemaVersion: 9,
+    schemaVersion: 10,
     month,
     fetchedAt,
     items,

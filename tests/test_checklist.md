@@ -1,5 +1,28 @@
 # テストチェックリスト
 
+## 2026-06-26 v10
+
+- [x] 第1優先：公式条件適合金利が `getEstimatedRate` から `official-condition-matched` で返る
+- [x] 第2優先：aggregator 由来の `advertisedMinRate` が `aggregator-reference` ラベルで返る
+- [x] 第3優先：公式HTML系で団信不明な場合 `advertisedMinRate + 0.3%` が `estimated-with-insurance` ラベルで返る
+- [x] `INSURANCE_ADDON_ESTIMATE` 定数が +0.3% である
+- [x] 第4優先：広告下限が無い場合 `expectedVariableRateRange` 中央値が `estimated-midrange` ラベルで返る
+- [x] 第4優先：source が無くても落ちずに `effectiveRate` が返る
+- [x] 第3・4優先・第2優先（aggregator）は `isLatestFetchedCandidate` で false（推薦対象外）
+- [x] 第1優先（公式条件適合）は `isLatestFetchedCandidate` で true（推薦対象）
+- [x] `recalculateComparisonRow`：rateOffer 無しでも `conditionMatchedRate` が undefined にならない
+- [x] `recalculateComparisonRow`：advertisedMinRate のみある場合は +0.3% 推定
+- [x] `recalculateComparisonRow`：算定不可状態でも月返済額が必ず計算される
+- [x] 比較表（モバイル・デスクトップ）から「算定不可」「未取得」表示が全て消える
+- [x] 条件適合金利欄に tier ラベル（条件適合 / 参考値 / 推定値（団信込）/ 推定値（中央レンジ））が表示される
+- [x] `schemaVersion: 10` を返す
+- [x] 画面ビルド表示が `2026/06/26 v10`
+- [x] Service Workerが `mortgage-rate-checker-v10-20260626`
+- [x] ルート `npm test`（72件パス）
+- [x] ルート `npx tsc -b`
+- [x] ルート Functions/Workerの各 `node --check`
+- [x] `deliverables/mortgage-rate-checker-github/` の `npm test` / `npx tsc -b` / `node --check`
+
 ## 2026-06-25 v9
 
 - [x] モゲチェック銀行別記事から、エイリアス周辺の借換え変動金利を抽出する

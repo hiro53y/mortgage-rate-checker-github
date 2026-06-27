@@ -57,6 +57,16 @@ const confidenceLabels = {
   failed: "取得失敗",
 };
 
+const estimationTierClasses: Record<
+  NonNullable<BankComparisonRow["estimationTier"]>,
+  string
+> = {
+  "official-condition-matched": "bg-emerald-50 text-emerald-700",
+  "aggregator-reference": "bg-amber-50 text-amber-800",
+  "estimated-with-insurance": "bg-slate-100 text-slate-700",
+  "estimated-midrange": "bg-slate-100 text-slate-600",
+};
+
 function getEvidenceSourceLabel(row: BankComparisonRow) {
   const labels = (row.rateOffer?.evidence ?? []).map((evidence) => {
     if (evidence.sourceKind === "official-api") return "公式API";
@@ -123,10 +133,11 @@ export function ComparisonTable({
           const source = findSource(row);
           const status = getRateStatus(row);
           const usedRate = getRateUsedForCalculation(row);
-          const primaryRate = row.manualOverrideRate ?? row.conditionMatchedRate;
-          const canShowCalculation =
-            row.rowKind === "base" || primaryRate !== undefined || !row.rateOffer;
+          const primaryRate =
+            row.manualOverrideRate ?? row.conditionMatchedRate ?? row.effectiveRate;
           const isDimmed = row.rowKind !== "base" && dimmedStatuses.has(status);
+          const tier = row.estimationTier;
+          const tierLabel = row.estimationLabel;
           return (
             <div
               key={row.id}
@@ -150,17 +161,20 @@ export function ComparisonTable({
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-base font-black text-navy-800">
-                    {row.rowKind === "base"
-                      ? formatRate(usedRate)
-                      : primaryRate !== undefined
-                        ? formatRate(primaryRate)
-                        : "算定不可"}
+                    {row.rowKind === "base" ? formatRate(usedRate) : formatRate(primaryRate)}
                   </p>
                   <span
                     className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-bold ${statusClasses[status]}`}
                   >
                     {statusLabels[status]}
                   </span>
+                  {row.rowKind !== "base" && tier && tierLabel ? (
+                    <span
+                      className={`mt-1 ml-1 inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${estimationTierClasses[tier]}`}
+                    >
+                      {tierLabel}
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
@@ -177,7 +191,7 @@ export function ComparisonTable({
               ) : null}
               {isDimmed && row.rowKind !== "base" ? (
                 <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
-                  当月の自動取得に失敗しました。下の「手入力補正」に公式ページの当月金利を入力し、「公式確認済み」にチェックを入れて「再判定」を押してください。
+                  当月の自動取得に失敗したため推定値を表示しています。正確な値は下の「手入力補正」に公式ページの当月金利を入力し、「公式確認済み」にチェックを入れて「再判定」を押してください。
                 </p>
               ) : null}
 
@@ -186,8 +200,12 @@ export function ComparisonTable({
                   <>
                     <InfoRow
                       label="条件適合金利"
-                      value={row.conditionMatchedRate !== undefined ? formatRate(row.conditionMatchedRate) : "算定不可"}
+                      value={formatRate(row.conditionMatchedRate ?? row.effectiveRate)}
                       emphasis
+                    />
+                    <InfoRow
+                      label="信頼度"
+                      value={tierLabel ?? "未判定"}
                     />
                     <InfoRow
                       label="広告下限金利"
@@ -209,21 +227,16 @@ export function ComparisonTable({
                     />
                   </>
                 ) : null}
-                <InfoRow
-                  label="月返済"
-                  value={canShowCalculation ? formatMoney(row.monthlyPayment) : "算定不可"}
-                />
+                <InfoRow label="月返済" value={formatMoney(row.monthlyPayment)} />
                 <InfoRow
                   label="ボーナス返済"
                   value={
-                    canShowCalculation && row.bonusPayment !== undefined
-                      ? formatMoney(row.bonusPayment)
-                      : "算定不可"
+                    row.bonusPayment !== undefined ? formatMoney(row.bonusPayment) : "—"
                   }
                 />
                 <InfoRow
                   label="12年月返済差"
-                  value={canShowCalculation ? formatManYen(row.netBenefit) : "算定不可"}
+                  value={formatManYen(row.netBenefit)}
                   emphasis
                 />
                 <InfoRow label="保障" value={row.insuranceLevel} />
@@ -321,12 +334,9 @@ export function ComparisonTable({
             const source = findSource(row);
             const status = getRateStatus(row);
             const usedRate = getRateUsedForCalculation(row);
-            const canShowCalculation =
-              row.rowKind === "base" ||
-              row.manualOverrideRate !== undefined ||
-              row.conditionMatchedRate !== undefined ||
-              !row.rateOffer;
             const isDimmed = row.rowKind !== "base" && dimmedStatuses.has(status);
+            const tier = row.estimationTier;
+            const tierLabel = row.estimationLabel;
             return (
               <tr
                 key={row.id}
@@ -357,14 +367,21 @@ export function ComparisonTable({
                   ) : null}
                   {isDimmed ? (
                     <p className="mt-1 text-xs font-semibold text-amber-800">
-                      手入力補正で当月値を入力してください。
+                      推定値を表示中。正確な値は手入力補正で当月値を入力してください。
                     </p>
                   ) : null}
                 </td>
                 <td className="px-3 py-3">
                   <p className="font-black text-navy-800">
-                    {row.conditionMatchedRate !== undefined ? formatRate(row.conditionMatchedRate) : "算定不可"}
+                    {formatRate(row.conditionMatchedRate ?? row.effectiveRate)}
                   </p>
+                  {row.rowKind !== "base" && tier && tierLabel ? (
+                    <span
+                      className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${estimationTierClasses[tier]}`}
+                    >
+                      {tierLabel}
+                    </span>
+                  ) : null}
                   <p className="mt-1 text-xs text-slate-500">
                     下限 {row.advertisedMinRate !== undefined ? formatRate(row.advertisedMinRate) : "未取得"}
                   </p>
@@ -417,12 +434,10 @@ export function ComparisonTable({
                 </td>
                 <td className="px-3 py-3 text-slate-700">{row.insuranceLevel}</td>
                 <td className="px-3 py-3 font-bold text-slate-900">
-                  {canShowCalculation ? formatMoney(row.monthlyPayment) : "算定不可"}
+                  {formatMoney(row.monthlyPayment)}
                 </td>
                 <td className="px-3 py-3 font-bold text-slate-900">
-                  {canShowCalculation && row.bonusPayment !== undefined
-                    ? formatMoney(row.bonusPayment)
-                    : "算定不可"}
+                  {row.bonusPayment !== undefined ? formatMoney(row.bonusPayment) : "—"}
                 </td>
                 <td
                   className={`px-3 py-3 font-black ${
@@ -433,7 +448,7 @@ export function ComparisonTable({
                         : "text-red-700"
                   }`}
                 >
-                  {canShowCalculation ? formatManYen(row.netBenefit) : "算定不可"}
+                  {formatManYen(row.netBenefit)}
                 </td>
                 <td className="px-3 py-3">
                   {source ? (

@@ -40,6 +40,8 @@ export type InsuranceCoverage =
   | "full-disease"
   | "unknown";
 
+export type InsuranceMatchQuality = "exact" | "near" | "base-reference";
+
 export type LoanPaymentBasisStatus = {
   registeredMonthlyPayment: number;
   registeredBonusPayment: number;
@@ -103,6 +105,12 @@ export type RateSourceKind =
 export type RateConfidence = "verified" | "corroborated" | "review" | "failed";
 export type RateEligibility = "eligible" | "conditional" | "ineligible" | "unknown";
 
+export type RateEstimationTier =
+  | "official-condition-matched"
+  | "aggregator-reference"
+  | "estimated-with-insurance"
+  | "estimated-midrange";
+
 export type RateOption = {
   id: string;
   label: string;
@@ -113,6 +121,13 @@ export type RateOption = {
   requiresSbiHyper?: boolean;
   maxBorrowerAge?: number;
   maxRemainingMonths?: number;
+};
+
+export type InsurancePlanRate = {
+  coverage: Exclude<InsuranceCoverage, "unknown">;
+  label: string;
+  addonRate: number;
+  sourceUrl?: string;
 };
 
 export type RateEvidence = {
@@ -135,6 +150,9 @@ export type RateOffer = {
   baseRate?: number;
   discountRate?: number;
   insuranceAddonRate?: number;
+  insurancePlans?: InsurancePlanRate[];
+  insuranceCoverageUsed?: InsuranceCoverage;
+  insuranceMatchQuality?: InsuranceMatchQuality;
   longTermAddonRate?: number;
   applicableMonth: string;
   fetchedAt: string;
@@ -176,6 +194,10 @@ export type BankComparisonRow = {
   confidence?: RateConfidence;
   eligibility?: RateEligibility;
   eligibilityReason?: string;
+  insuranceCoverageUsed?: InsuranceCoverage;
+  insuranceMatchQuality?: InsuranceMatchQuality;
+  estimationTier?: RateEstimationTier;
+  estimationLabel?: string;
   applicableMonth?: string;
   lastFetchedAt?: string;
   lastManualUpdatedAt?: string;
@@ -203,6 +225,8 @@ export type RefinanceResult = {
   candidateSourceKind?: RateSourceKind;
   candidateApplicableMonth?: string;
   candidateEligibilityReason?: string;
+  candidateInsuranceCoverageUsed?: InsuranceCoverage;
+  candidateInsuranceMatchQuality?: InsuranceMatchQuality;
   currentRemainingTotalPayment: number;
   refinanceRemainingTotalPayment: number;
   refinanceCosts: number;

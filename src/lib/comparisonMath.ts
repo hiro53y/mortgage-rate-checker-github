@@ -1,7 +1,9 @@
 import type {
   BankComparisonRow,
+  BankRateSource,
   LoanPaymentBasisStatus,
   LoanProfile,
+  RateEstimationTier,
   RefinanceCostBreakdown,
   RefinanceResult,
 } from "../types";
@@ -19,6 +21,94 @@ import {
   judgeRefinance,
 } from "./refinanceMath.ts";
 import { evaluateRateOfferForLoan, isOfferCurrentMonth } from "./rateEligibility.ts";
+import { bankRateSources } from "./bankSources.ts";
+
+/**
+ * 団信込み（がん100%相当）に揃えるための想定上乗せ幅。
+ * - もみじ銀行の現在ローンは「がん100%団信込み」のため、推定値もそれに揃える
+ * - 業界平均：標準団信から がん100%団信 で +0.2〜0.3% が一般的
+ * - 安全側として +0.3% を採用
+ */
+export const INSURANCE_ADDON_ESTIMATE = 0.3;
+
+export type EstimatedRateResult = {
+  rate: number;
+  tier: RateEstimationTier;
+  label: string;
+};
+
+/**
+ * 3層フォールバックで必ず金利を返す。
+ * 第1: 公式条件適合金利（rateOffer + 条件評価）
+ * 第2: aggregator（まとめサイト）由来の参考値
+ * 第3: 広告下限 + 一律団信上乗せ（+0.3%）
+ * 第4: 銀行の expectedVariableRateRange 中央値
+ */
+export function getEstimatedRate(
+  row: BankComparisonRow,
+  source?: BankRateSource,
+  conditionMatchedRate?: number,
+): EstimatedRateResult {
+  // 第1優先: 公式の条件適合金利
+  if (conditionMatchedRate !== undefined) {
+    return {
+      rate: conditionMatchedRate,
+      tier: "official-condition-matched",
+      label: "条件適合",
+    };
+  }
+
+  const advertisedMin = row.rateOffer?.advertisedMinRate ?? row.advertisedMinRate;
+
+  // 第2優先: aggregator (まとめサイト) 由来の参考値
+  if (
+    advertisedMin !== undefined &&
+    row.rateOffer?.sourceKind === "aggregator"
+  ) {
+    return {
+      rate: Number(advertisedMin.toFixed(3)),
+      tier: "aggregator-reference",
+      label: "参考値（まとめサイト）",
+    };
+  }
+
+  // 第3優先: 広告下限 + 一律団信上乗せ (+0.3%)
+  if (advertisedMin !== undefined) {
+    return {
+      rate: Number((advertisedMin + INSURANCE_ADDON_ESTIMATE).toFixed(3)),
+      tier: "estimated-with-insurance",
+      label: "推定値（広告下限+団信0.3%）",
+    };
+  }
+
+  // 第4優先: expectedVariableRateRange 中央値
+  const range = source?.expectedVariableRateRange;
+  if (range && range.length === 2) {
+    const midrange = (range[0] + range[1]) / 2;
+    return {
+      rate: Number(midrange.toFixed(3)),
+      tier: "estimated-midrange",
+      label: "推定値（業界中央レンジ）",
+    };
+  }
+
+  // 最終フォールバック: 元の effectiveRate
+  return {
+    rate: row.effectiveRate,
+    tier: "estimated-midrange",
+    label: "推定値（業界中央レンジ）",
+  };
+}
+
+function findBankSource(row: BankComparisonRow): BankRateSource | undefined {
+  if (row.rateOffer?.bankRateSourceId) {
+    const matched = bankRateSources.find(
+      (source) => source.id === row.rateOffer?.bankRateSourceId,
+    );
+    if (matched) return matched;
+  }
+  return bankRateSources.find((source) => row.bankName.includes(source.bankName));
+}
 
 const BENEFIT_DISPLAY_MONTHS = 144;
 const PAYMENT_STALENESS_THRESHOLD_YEN = 1000;
@@ -51,6 +141,14 @@ export function isLatestFetchedCandidate(row: BankComparisonRow, date = new Date
     row.manualApplicableMonth === currentMonth &&
     Boolean(row.manualSourceUrl?.startsWith("https://"));
   if (verifiedManual) return true;
+  // 推定値（第3・4優先）は推薦対象外。
+  // v10: 第1優先（公式条件適合）のみが自動推薦の対象。
+  if (
+    row.estimationTier !== undefined &&
+    row.estimationTier !== "official-condition-matched"
+  ) {
+    return false;
+  }
   return (
     row.conditionMatchedRate !== undefined &&
     row.rateOffer?.confidence === "verified" &&
@@ -117,6 +215,20 @@ export function recalculateComparisonRow(
     Boolean(row.manualVerifiedAt) &&
     Boolean(row.manualApplicableMonth) &&
     Boolean(row.manualSourceUrl);
+
+  // 3層フォールバックで「条件適合金利」を必ず確定する。
+  // 第1: offerEvaluation?.conditionMatchedRate
+  // 第2: aggregator由来の参考値
+  // 第3: 広告下限 + 0.3% 一律団信上乗せ
+  // 第4: 銀行のexpectedVariableRateRange中央値
+  const bankSource = findBankSource(row);
+  const estimation = getEstimatedRate(
+    row,
+    bankSource,
+    offerEvaluation?.conditionMatchedRate,
+  );
+  const finalConditionMatchedRate = estimation.rate;
+
   const derivedRow: BankComparisonRow = {
     ...row,
     rateOffer:
@@ -130,7 +242,9 @@ export function recalculateComparisonRow(
           }
         : row.rateOffer,
     advertisedMinRate: row.rateOffer?.advertisedMinRate ?? row.advertisedMinRate,
-    conditionMatchedRate: offerEvaluation?.conditionMatchedRate,
+    conditionMatchedRate: finalConditionMatchedRate,
+    estimationTier: estimation.tier,
+    estimationLabel: estimation.label,
     sourceKind: hasVerifiedManual ? "manual-verified" : row.rateOffer?.sourceKind,
     confidence: hasVerifiedManual ? "verified" : row.rateOffer?.confidence,
     eligibility: hasVerifiedManual ? "eligible" : (offerEvaluation?.eligibility ?? "unknown"),
