@@ -1,5 +1,61 @@
 # 引き継ぎメモ
 
+## 2026-06-25 v9 取得不能の段階フォールバック強化
+
+## 現在の状況
+
+「他行の銀行情報が取得できず算定不可」を解消するため、取得失敗の根本原因に同時並行で対処した。主系統（公式構造化 / 公式HTML / 価格.com / ダイヤモンド不動産）に加えて、補助系統5つ（モゲチェック銀行別記事 / ZUU online 月次まとめ / Wayback Machine スナップショット / 前月KV履歴 / Cloudflare Browser Rendering）を Cron Worker 内で順番に試行する。前月履歴フォールバックは KV があれば常に効くため、Cron Worker / KV を本番設定するだけで「画面上の算定不可」は当月公式値の取得に成功しない銀行でも前月値で参考表示できるようになった。
+
+UI側では `stale`（前月値）と `failed`（取得失敗）の行を淡色化し、当月手入力の導線を強調した。借換え画面の空状態は「マイローン確認 → 公式値手入力 → 再判定」の4ステップで案内している。借換え推薦の対象は当月公式 / 公式確認済み手入力に限定したままで、stale 値は推薦から除外する設計を維持する。
+
+## 変更内容
+
+- `functions/api/rateAdapters.js`
+  - 補助アダプタ `parseMogecheckArticle`、`parseZuuArticle`、`fetchWaybackOffer`、`fetchBrowserRenderedOffer` を追加
+  - 前月KV履歴を読み込む `buildStaleOfferFromHistory` と `getPreviousMonthKey` を追加
+  - `createAdapterContext(fetchImpl, { browserBinding, historyOfferLookup })` で補助系統への参照を統一
+  - `fetchBankOffer` を「主系統 → 補助系統 → Browser Rendering → 前月履歴」の順で段階フォールバック
+- `functions/api/rateService.js`
+  - `RATE_CACHE` から銀行別の前月履歴を引く `historyOfferLookup` を生成し、`env.BROWSER` をアダプタに渡す
+  - 失敗理由に「履歴値」を含む `stale` offer の status を `"stale"` に分岐
+  - stale offer は当月履歴に上書き保存しない
+  - サマリメッセージに stale / failed のカウントを表示。`schemaVersion` を 9 に更新
+- `worker/wrangler.jsonc`
+  - `browser: { binding: "BROWSER" }` をコメント付きで同梱（Workers Paid 時のみ有効化）
+- UI
+  - `ComparisonTable` の `stale` / `failed` 行を淡色化し、当月手入力の導線を行内で強調
+  - `App.tsx` で API レスポンスの `status: "stale"` を `rateStatus: "stale"` に伝播
+  - `RefinanceBenefitPage` の空状態を4ステップ案内に差し替え
+- `docs/rate-worker.md` をダッシュボード手順レベルに展開
+- バージョン表示を `2026/06/25 v9`、Service Worker を `mortgage-rate-checker-v9-20260625` に更新
+
+## 検証
+
+- ルート: `npm test` 成功（追加6件を含めパス。下記の主要新規テスト）
+  - モゲチェック銀行別の借換え変動金利抽出
+  - ZUU online 月次まとめの当月限定採用
+  - `getPreviousMonthKey` の年跨ぎ
+  - `buildStaleOfferFromHistory` の review 化と「履歴値」明記
+  - 主系統全敗 + KV履歴あり → `stale` 表示
+  - schemaVersion 9 と stale/失敗カウントのメッセージ反映
+- ルート: `npx tsc -b` 成功
+- ルート: Functions / Worker 各 `node --check` 成功
+- `deliverables/mortgage-rate-checker-github/`: `npm test` / `npx tsc -b` / `node --check` 成功
+
+## 未完了
+
+- 本番 KV ID 設定と独立 Cron Worker のデプロイは画面操作レベルで `docs/rate-worker.md` に手順を整備したが、ユーザー側のダッシュボード操作が必要
+- Browser Rendering binding の有効化は Workers Paid プラン要件があり任意。バインディング無しでも他フォールバックで動く
+- ルート `npm run build` と `wrangler dry-run` はこの実行環境の `spawn EPERM` で未確認。ローカル端末で実行する
+
+## 次にやること
+
+1. Cloudflare ダッシュボードで KV namespace `RATE_CACHE` を作成し、ID を `worker/wrangler.jsonc` に貼り付ける
+2. Pages 側の Functions → KV bindings に `RATE_CACHE` を紐づける
+3. `npx wrangler deploy --config worker/wrangler.jsonc` で Cron Worker をデプロイする
+4. 翌朝06:00 JST 以降に公開 `/api/rates` の `cached: true` と銀行別 status を確認する
+5. JS依存銀行が残るなら、Workers Paid を有効化した上で `BROWSER` binding を追加する
+
 ## 2026-06-24 v8 取得不能修正
 
 ## 現在の状況

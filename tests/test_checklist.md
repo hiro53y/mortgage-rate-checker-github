@@ -1,5 +1,27 @@
 # テストチェックリスト
 
+## 2026-06-25 v9
+
+- [x] モゲチェック銀行別記事から、エイリアス周辺の借換え変動金利を抽出する
+- [x] ZUU online 月次まとめは当月を含む記事だけ採用する
+- [x] Wayback Machineの当月スナップショットから公式HTMLを再解析できる（実装、ユニットはモック）
+- [x] Browser Renderingは `BROWSER` バインディングが無い場合スキップする
+- [x] 主系統が全敗してもKV履歴に前月値があれば `stale` として参考表示する
+- [x] `stale` 結果は当月履歴に上書きしない（前月値で当月成功を汚さない）
+- [x] `getPreviousMonthKey` が年跨ぎを含めて前月キーを返す
+- [x] `buildStaleOfferFromHistory` が `confidence: review` と「履歴値」を明記する
+- [x] `schemaVersion: 9` を返し、stale/失敗のカウントが画面メッセージに含まれる
+- [x] 比較表で `stale`/`failed` 行が淡色化され、当月手入力導線が強調される
+- [x] 借換え画面の空状態が「マイローン確認 → 公式値手入力 → 再判定」の4ステップで案内される
+- [x] 画面ビルド表示が `2026/06/25 v9`
+- [x] Service Workerが `mortgage-rate-checker-v9-20260625`
+- [x] ルート `npm test`
+- [x] ルート `npx tsc -b`
+- [x] ルート Functions/Workerの各 `node --check`
+- [x] `deliverables/mortgage-rate-checker-github/` の `npm test` / `npx tsc -b` / `node --check`
+- [ ] 本番KV ID設定と独立Cron Workerデプロイ（手順書を `docs/rate-worker.md` に整備済み）
+- [ ] Browser Rendering binding の有効化（Workers Paid プラン時のみ）
+
 ## 2026-06-24 v8
 
 - [x] KV未設定・キャッシュ未作成のGETがライブ取得へフォールバックする

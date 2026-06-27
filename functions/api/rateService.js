@@ -3,6 +3,7 @@ import {
   createAdapterContext,
   fetchBankOffer,
   getJstMonthKey,
+  getPreviousMonthKey,
 } from "./rateAdapters.js";
 
 const LATEST_PAYLOAD_KEY = "rates:latest";
@@ -18,7 +19,16 @@ function isCurrentMonthOffer(offer, month) {
   return offer?.applicableMonth === month;
 }
 
+function isStaleHistoryOffer(offer) {
+  return (
+    typeof offer?.failureReason === "string" && offer.failureReason.includes("履歴値")
+  );
+}
+
 function validateOffer(source, offer, previousOffer, month) {
+  if (isStaleHistoryOffer(offer)) {
+    return offer;
+  }
   const rate = offer.advertisedMinRate;
   const [min, max] = source.expectedVariableRateRange;
   if (!Number.isFinite(rate) || rate < min || rate > max) {
@@ -55,15 +65,19 @@ function makeItem(source, fetchedAt, offer, lastGoodOffer, error) {
       fetchedAt,
       sourceUrl: source.apiUrl ?? source.referenceUrl ?? source.rateUrl,
       attemptedUrls: source.rateUrls,
-      message: `取得失敗: ${messageOf(error)}`,
+      message: `取得失敗: ${messageOf(error)} 公式ページを開いて手入力補正してください。`,
       offer: null,
       lastGoodOffer: lastGoodOffer ?? null,
     };
   }
   const rate = offer.conditionMatchedRate ?? offer.advertisedMinRate ?? null;
-  const status = ["verified", "corroborated"].includes(offer.confidence)
-    ? "success"
-    : "needs-review";
+  const isStale =
+    typeof offer.failureReason === "string" && offer.failureReason.includes("履歴値");
+  const status = isStale
+    ? "stale"
+    : ["verified", "corroborated"].includes(offer.confidence)
+      ? "success"
+      : "needs-review";
   const attemptedUrls = [
     ...(source.rateUrls ?? []),
     source.apiUrl,
@@ -84,7 +98,9 @@ function makeItem(source, fetchedAt, offer, lastGoodOffer, error) {
         ? offer.confidence === "verified"
           ? "公式構造化データから当月金利を取得しました。利用者条件の適合判定後に推薦可否を決めます。"
           : "当月金利を複数情報源で照合しました。団信・審査・優遇条件は確認が必要です。"
-        : offer.failureReason ?? "参考値または要確認値のため自動推薦対象外です。",
+        : status === "stale"
+          ? offer.failureReason ?? "履歴値を参考表示しています。公式確認と手入力補正を行ってください。"
+          : offer.failureReason ?? "参考値または要確認値のため自動推薦対象外です。",
     offer,
     lastGoodOffer: lastGoodOffer ?? null,
   };
@@ -139,7 +155,21 @@ export async function refreshAllRates(
     await kv.put(REFRESH_LOCK_KEY, lockId, { expirationTtl: LOCK_TTL_SECONDS });
   }
 
-  const adapterContext = createAdapterContext(fetchImpl);
+  const previousMonth = getPreviousMonthKey(date);
+  const historyOfferLookup = kv
+    ? async (sourceId) => {
+        const previousMonthOffer = await getJson(
+          kv,
+          `rates:history:${previousMonth}:${sourceId}`,
+        );
+        if (previousMonthOffer) return previousMonthOffer;
+        return getJson(kv, `rates:latest:${sourceId}`);
+      }
+    : null;
+  const adapterContext = createAdapterContext(fetchImpl, {
+    browserBinding: env?.BROWSER,
+    historyOfferLookup,
+  });
   const previousOffers = await Promise.all(
     BANK_RATE_SOURCES.map((source) => getJson(kv, `rates:latest:${source.id}`)),
   );
@@ -160,7 +190,9 @@ export async function refreshAllRates(
   if (kv) {
     await Promise.all(
       items.map((item, index) =>
-        item.offer ? writeOfferHistory(kv, BANK_RATE_SOURCES[index], item.offer, month) : undefined,
+        item.offer && item.status !== "stale"
+          ? writeOfferHistory(kv, BANK_RATE_SOURCES[index], item.offer, month)
+          : undefined,
       ),
     );
   }
@@ -176,14 +208,16 @@ export async function refreshAllRates(
       item.offer?.confidence === "corroborated" &&
       item.offer?.applicableMonth === month,
   ).length;
+  const staleCount = items.filter((item) => item.status === "stale").length;
+  const failedCount = items.filter((item) => item.status === "failed").length;
   const payload = {
-    schemaVersion: 8,
+    schemaVersion: 9,
     month,
     fetchedAt,
     items,
     cached: false,
     locked: false,
-    message: `${items.length}銀行を確認し、公式構造化データ${officialCurrentCount}銀行、複数情報源の照合値${corroboratedCount}銀行を取得しました。単一情報源の参考値は要確認です。`,
+    message: `${items.length}銀行を確認し、公式構造化データ${officialCurrentCount}銀行、複数情報源の照合値${corroboratedCount}銀行を取得しました。前月履歴値の参考表示は${staleCount}銀行、取得失敗は${failedCount}銀行です。`,
   };
   if (kv) {
     await kv.put(LATEST_PAYLOAD_KEY, JSON.stringify(payload));

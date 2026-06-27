@@ -56,17 +56,20 @@ export function RefinanceBenefitPage({
         <Card tone="amber" className="space-y-3">
           <SectionTitle title="候補選定の条件" />
           <p className="text-sm font-semibold leading-6 text-amber-900">
-            借換え候補は、当月の公式アダプタ取得値または公式確認済み手入力値のうち、入力済みの年齢・融資率・残期間・団信条件に適合した金利だけから選びます。参考値、前月値、条件不足の銀行は候補にしません。
+            借換え候補は、当月の公式アダプタ取得値または公式確認済み手入力値のうち、入力済みの年齢・融資率・残期間・団信条件に適合した金利だけから選びます。参考値、前月値（参考）、Wayback値、条件不足の銀行は候補にしません。
           </p>
         </Card>
 
         <PaymentBasisNotice loan={loan} paymentBasis={paymentBasis} />
 
         <Card className="space-y-3">
-          <SectionTitle title="次の操作" />
-          <p className="text-sm leading-6 text-slate-600">
-            マイローン設定の生年月日・概算物件価値・団信区分を確認してください。取得できない銀行は公式ページで条件を確認し、比較表へ金利と適用年月を登録してください。
-          </p>
+          <SectionTitle title="次の操作（推奨順）" />
+          <ol className="ml-4 list-decimal space-y-1 text-sm leading-6 text-slate-700">
+            <li>マイローン設定の生年月日・概算物件価値・団信区分が埋まっているか確認する</li>
+            <li>比較表で「前月値（参考）」「取得失敗」になっている銀行の公式ページを開き、当月の変動金利を確認する</li>
+            <li>比較表の手入力補正に当月金利・適用年月を入力し、「公式確認済み」にチェックを入れて「再判定」を押す</li>
+            <li>条件適合した候補が1行でもできれば、このページに自動で借換えメリットが表示される</li>
+          </ol>
         </Card>
 
         <Button fullWidth onClick={onBack}>

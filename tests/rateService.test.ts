@@ -71,12 +71,24 @@ test("10分ロック中は重複再取得せずキャッシュを返す", async 
   assert.equal(called, false);
 });
 
-test("取得失敗時は最後の正常値を保持する", async () => {
+test("v9: 取得失敗時は最後の正常値を履歴フォールバックでstale表示し、lastGoodOfferも保持する", async () => {
   const kv = new FakeKv();
   const lastGood = {
     bankRateSourceId: "netbk",
     advertisedMinRate: 0.95,
     applicableMonth: "2026-05",
+    confidence: "verified",
+    sourceKind: "official-api",
+    conditionsSummary: "前月の公式値",
+    evidence: [
+      {
+        sourceKind: "official-api",
+        sourceUrl: "x",
+        rate: 0.95,
+        applicableMonth: "2026-05",
+        label: "公式",
+      },
+    ],
   };
   await kv.put("rates:latest:netbk", JSON.stringify(lastGood));
   const result = await refreshAllRates(
@@ -88,7 +100,8 @@ test("取得失敗時は最後の正常値を保持する", async () => {
     },
   );
   const netbk = result.items.find((item) => item.bankRateSourceId === "netbk");
-  assert.equal(netbk?.status, "failed");
+  assert.equal(netbk?.status, "stale");
+  assert.equal(netbk?.rate, 0.95);
   assert.equal(netbk?.lastGoodOffer?.advertisedMinRate, 0.95);
 });
 
@@ -105,4 +118,66 @@ test("前月の公式値は表示用に保持しても当月成功扱いにし�
   const paypay = result.items.find((item) => item.bankRateSourceId === "paypay");
   assert.equal(paypay?.status, "needs-review");
   assert.match(paypay?.offer?.failureReason ?? "", /当月ではありません/);
+});
+
+test("v9: 主系統が全失敗かつ前月履歴があればstaleとして表示し、当月の履歴は上書きしない", async () => {
+  const kv = new FakeKv();
+  await kv.put(
+    "rates:history:2026-05:netbk",
+    JSON.stringify({
+      bankRateSourceId: "netbk",
+      bankName: "住信SBIネット銀行",
+      productName: "WEB申込コース（借換え）",
+      schemaVersion: 1,
+      advertisedMinRate: 0.95,
+      applicableMonth: "2026-05",
+      confidence: "verified",
+      sourceKind: "official-api",
+      conditionsSummary: "前月の公式値",
+      adapterId: "netbk-jsonp",
+      rateOptions: [],
+      evidence: [
+        {
+          sourceKind: "official-api",
+          sourceUrl: "x",
+          rate: 0.95,
+          applicableMonth: "2026-05",
+          label: "公式",
+        },
+      ],
+    }),
+  );
+  const result = await refreshAllRates(
+    { RATE_CACHE: kv },
+    {
+      date: new Date("2026-06-21T00:00:00.000Z"),
+      fetchImpl: async () => {
+        throw new Error("network down");
+      },
+      bypassLock: true,
+    },
+  );
+  const netbk = result.items.find((item) => item.bankRateSourceId === "netbk");
+  assert.equal(netbk?.status, "stale");
+  assert.equal(netbk?.rate, 0.95);
+  assert.match(netbk?.message ?? "", /履歴値/);
+  // stale結果は当月履歴に書き込まない（前月値で当月を上書きしないこと）
+  assert.equal(kv.values.has("rates:history:2026-06:netbk"), false);
+});
+
+test("v9: schemaVersionは9を返し、staleと失敗のカウントがメッセージに含まれる", async () => {
+  const kv = new FakeKv();
+  const result = await refreshAllRates(
+    { RATE_CACHE: kv },
+    {
+      date: new Date("2026-06-21T00:00:00.000Z"),
+      fetchImpl: async () => {
+        throw new Error("network down");
+      },
+      bypassLock: true,
+    },
+  );
+  assert.equal(result.schemaVersion, 9);
+  assert.match(result.message, /前月履歴値の参考表示/);
+  assert.match(result.message, /取得失敗/);
 });

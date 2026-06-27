@@ -6,10 +6,15 @@
 
 ## 作業中
 
-- [ ] 本番KV IDを設定し、独立Cron Workerをデプロイする（未設定時のライブ取得フォールバックは実装済み）
+- [ ] 本番KV IDを設定し、独立Cron Workerをデプロイする（未設定時のライブ取得フォールバックは実装済み。手順書は `docs/rate-worker.md`）
+- [ ] （任意）Workers Paid を有効化し、Worker に `BROWSER` binding を追加する（JS依存銀行向けのv9補助系統）
 
 ## 完了
 
+- [x] v9: モゲチェック・ZUU・Wayback Machine・前月KV履歴・Browser Renderingの5系統フォールバックを実装する
+- [x] v9: UIで stale / failed 行の淡色化と当月手入力導線の強調を実装する
+- [x] v9: `docs/rate-worker.md` を Cloudflare ダッシュボード手順レベルに展開する
+- [x] v9: テスト追加とビルド検証、deliverables同期、handoff/decision_log/checklist更新
 - [x] プロジェクト立ち上げ方針を整理する
 - [x] 住宅ローン金利チェッカー v1を実装する
 - [x] 成果物パッケージを作成する

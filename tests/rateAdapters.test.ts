@@ -3,15 +3,19 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { BANK_RATE_SOURCES } from "../shared/bankRateSources.js";
 import {
+  buildStaleOfferFromHistory,
   createAdapterContext,
   fetchBankOffer,
+  getPreviousMonthKey,
   parseDiamondArticleHtml,
   parseHiroginDiamondHtml,
   parseKakakuCompanyShiftJis,
   parseKakakuShiftJis,
+  parseMogecheckArticle,
   parseNetbkJsonp,
   parsePayPayRateJson,
   parseSbiShinseiJson,
+  parseZuuArticle,
 } from "../functions/api/rateAdapters.js";
 
 const fixture = (name: string) =>
@@ -123,4 +127,81 @@ test("広島銀行は手数料・口コミ・固定・過去月を採用しな�
   assert.equal(offer?.advertisedMinRate, 0.95);
   assert.equal(offer?.applicableMonth, "2026-06");
   assert.equal(offer?.sourceKind, "aggregator");
+});
+
+test("v9: モゲチェック銀行別記事からエイリアス周辺の借換え変動金利を抽出する", () => {
+  const html = `
+    <html><body>
+      <h2>2026年6月の住宅ローン金利比較</h2>
+      <article>
+        <h3>住信SBIネット銀行</h3>
+        <p>借り換え 変動金利 年0.95% (融資率80%以下)</p>
+        <p>事務手数料 借入額×2.2%</p>
+      </article>
+      <article>
+        <h3>auじぶん銀行</h3>
+        <p>借り換え 変動金利 年0.98%</p>
+      </article>
+    </body></html>
+  `;
+  const offer = parseMogecheckArticle(html, source("netbk"), fetchedAt, now);
+  assert.equal(offer?.advertisedMinRate, 0.95);
+  assert.equal(offer?.sourceKind, "aggregator");
+  assert.equal(offer?.confidence, "review");
+});
+
+test("v9: ZUU online 月次まとめは当月を含む記事だけ採用する", () => {
+  const matched = parseZuuArticle(
+    `<p>2026年6月の住宅ローン比較。住信SBIネット銀行の変動金利は0.95%。</p>`,
+    source("netbk"),
+    fetchedAt,
+    now,
+  );
+  assert.equal(matched?.advertisedMinRate, 0.95);
+
+  const unmatched = parseZuuArticle(
+    `<p>2025年12月の住宅ローン比較。住信SBIネット銀行の変動金利は1.20%。</p>`,
+    source("netbk"),
+    fetchedAt,
+    now,
+  );
+  assert.equal(unmatched, null);
+});
+
+test("v9: getPreviousMonthKeyは前月キーを返す（年跨ぎを含む）", () => {
+  assert.equal(getPreviousMonthKey(new Date("2026-06-15T00:00:00Z")), "2026-05");
+  assert.equal(getPreviousMonthKey(new Date("2026-01-15T00:00:00Z")), "2025-12");
+});
+
+test("v9: buildStaleOfferFromHistoryは履歴値をreview扱いにし、失敗理由に履歴値を明記する", () => {
+  const historyOffer = {
+    advertisedMinRate: 0.95,
+    applicableMonth: "2026-05",
+    confidence: "verified",
+    conditionsSummary: "前月の公式値",
+    evidence: [{ sourceKind: "official-api", sourceUrl: "x", rate: 0.95, applicableMonth: "2026-05", label: "公式" }],
+  };
+  const stale = buildStaleOfferFromHistory(historyOffer, source("netbk"), fetchedAt, now);
+  assert.equal(stale?.confidence, "review");
+  assert.match(stale?.failureReason ?? "", /履歴値/);
+  assert.equal(stale?.evidence[0].label.includes("履歴値"), true);
+});
+
+test("v9: 主系統が全敗してもhistoryOfferLookupがあれば前月履歴をstaleとして返す", async () => {
+  const fetchImpl = async () => {
+    throw new Error("network down");
+  };
+  const historyOffer = {
+    advertisedMinRate: 0.95,
+    applicableMonth: "2026-05",
+    confidence: "verified",
+    conditionsSummary: "前月公式値",
+    evidence: [{ sourceKind: "official-api", sourceUrl: "x", rate: 0.95, applicableMonth: "2026-05", label: "公式" }],
+  };
+  const context = createAdapterContext(fetchImpl, {
+    historyOfferLookup: async () => historyOffer,
+  });
+  const offer = await fetchBankOffer(source("netbk"), fetchedAt, now, context);
+  assert.equal(offer.advertisedMinRate, 0.95);
+  assert.match(offer.failureReason ?? "", /履歴値/);
 });

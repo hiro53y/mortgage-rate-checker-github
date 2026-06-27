@@ -5,6 +5,9 @@ const OFFICIAL_HTML_TIMEOUT_MS = 6000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const KAKAKU_URL =
   "https://s.kakaku.com/housing-loan/ranking.asp?hl_ltype=1&utm_source=mortgage-rate-checker";
+const MOGECHECK_URL = "https://mogecheck.jp/articles/13";
+const ZUU_ONLINE_URL = "https://zuuonline.com/categories/economy_money/483773";
+const WAYBACK_AVAILABLE_API = "https://archive.org/wayback/available";
 const CORROBORATION_TOLERANCE = 0.15;
 
 const REQUEST_HEADERS = {
@@ -422,6 +425,216 @@ export function parseHiroginDiamondHtml(html, source, fetchedAt, date = new Date
   return offer;
 }
 
+function getPreviousMonthKey(date = new Date()) {
+  const parts = getJstParts(date);
+  const year = Number(parts.year);
+  const month = Number(parts.month);
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  return `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+}
+
+export function parseMogecheckArticle(html, source, fetchedAt, date = new Date()) {
+  const text = normalizeText(html);
+  if (!/住宅ローン|借り換え|借換|変動金利/.test(text)) return null;
+  const aliases = source.aggregateAliases ?? [source.bankName];
+  const currentMonth = getJstMonthKey(date);
+  const currentJapaneseMonth = `${Number(currentMonth.slice(0, 4))}年${Number(currentMonth.slice(5))}月`;
+  const [min, max] = source.expectedVariableRateRange ?? [0.2, 3.5];
+  const matches = [];
+  for (const alias of aliases) {
+    let index = text.indexOf(alias);
+    while (index >= 0 && matches.length < 12) {
+      const block = text.slice(Math.max(0, index - 120), index + 400);
+      if (/借り換え|借換|変動金利|変動/.test(block)) {
+        for (const match of block.matchAll(/年?\s*([0-9]+(?:\.[0-9]{1,3})?)\s*%/g)) {
+          const rate = Number(match[1]);
+          if (rate < min || rate > max) continue;
+          const localPrefix = block.slice(Math.max(0, match.index - 12), match.index);
+          if (/上乗せ|事務手数料|保証料|固定/.test(localPrefix)) continue;
+          matches.push(rate);
+        }
+      }
+      index = text.indexOf(alias, index + alias.length);
+    }
+  }
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => a - b);
+  const applicableMonth = text.includes(currentJapaneseMonth) ? currentMonth : getPreviousMonthKey(date);
+  const offer = baseOffer(source, fetchedAt, applicableMonth, MOGECHECK_URL, "aggregator");
+  offer.advertisedMinRate = matches[0];
+  offer.confidence = "review";
+  offer.conditionsSummary =
+    "モゲチェック銀行別記事から、借り換え・変動金利の候補を抽出。団信・審査・優遇条件は要確認。";
+  offer.failureReason = "総合サイト参考値のため自動推薦対象外";
+  offer.rateOptions = [
+    { id: "mogecheck-reference", label: "モゲチェック参考値", rate: matches[0] },
+  ];
+  offer.evidence = [
+    {
+      sourceKind: "aggregator",
+      sourceUrl: MOGECHECK_URL,
+      rate: matches[0],
+      applicableMonth,
+      label: "モゲチェック 銀行別記事",
+    },
+  ];
+  return offer;
+}
+
+export function parseZuuArticle(html, source, fetchedAt, date = new Date()) {
+  const text = normalizeText(html);
+  if (!/住宅ローン|変動金利/.test(text)) return null;
+  const aliases = source.aggregateAliases ?? [source.bankName];
+  const currentMonth = getJstMonthKey(date);
+  const currentJapaneseMonth = `${Number(currentMonth.slice(0, 4))}年${Number(currentMonth.slice(5))}月`;
+  if (!text.includes(currentJapaneseMonth)) return null;
+  const [min, max] = source.expectedVariableRateRange ?? [0.2, 3.5];
+  const candidates = [];
+  for (const alias of aliases) {
+    let index = text.indexOf(alias);
+    while (index >= 0 && candidates.length < 8) {
+      const block = text.slice(Math.max(0, index - 60), index + 240);
+      const rateMatch = block.match(/変動金利[^%]{0,80}?([0-9]+(?:\.[0-9]{1,3})?)\s*%/);
+      if (rateMatch) {
+        const rate = Number(rateMatch[1]);
+        if (rate >= min && rate <= max) candidates.push(rate);
+      }
+      index = text.indexOf(alias, index + alias.length);
+    }
+  }
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a - b);
+  const offer = baseOffer(source, fetchedAt, currentMonth, ZUU_ONLINE_URL, "aggregator");
+  offer.advertisedMinRate = candidates[0];
+  offer.confidence = "review";
+  offer.conditionsSummary =
+    "ZUU online 月次まとめから、当月の変動金利を銀行名別に抽出。団信・審査・優遇条件は要確認。";
+  offer.failureReason = "総合サイト参考値のため自動推薦対象外";
+  offer.rateOptions = [
+    { id: "zuu-reference", label: "ZUU online 参考値", rate: candidates[0] },
+  ];
+  offer.evidence = [
+    {
+      sourceKind: "aggregator",
+      sourceUrl: ZUU_ONLINE_URL,
+      rate: candidates[0],
+      applicableMonth: currentMonth,
+      label: "ZUU online 月次まとめ",
+    },
+  ];
+  return offer;
+}
+
+export async function fetchWaybackSnapshotUrl(targetUrl, fetchImpl, date = new Date()) {
+  const parts = getJstParts(date);
+  const timestamp = `${parts.year}${parts.month}`;
+  const query = `${WAYBACK_AVAILABLE_API}?url=${encodeURIComponent(targetUrl)}&timestamp=${timestamp}`;
+  try {
+    const bytes = await fetchBounded(query, undefined, fetchImpl, {
+      attempts: 1,
+      timeoutMs: OFFICIAL_HTML_TIMEOUT_MS,
+    });
+    const payload = JSON.parse(decodeUtf8(bytes));
+    const snapshot = payload?.archived_snapshots?.closest;
+    if (snapshot?.available && snapshot.status === "200") {
+      return snapshot.url;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export async function fetchWaybackOffer(source, fetchedAt, date, context) {
+  if (!source.rateUrls?.length) return null;
+  const targetUrl = source.rateUrls[0];
+  const snapshotUrl = await fetchWaybackSnapshotUrl(targetUrl, context.fetchImpl, date);
+  if (!snapshotUrl) return null;
+  const bytes = await fetchBounded(snapshotUrl, undefined, context.fetchImpl, {
+    attempts: 1,
+    timeoutMs: OFFICIAL_HTML_TIMEOUT_MS,
+  });
+  const html = decodeUtf8(bytes);
+  const rate = extractRate(html, source);
+  if (rate === null) return null;
+  const offer = baseOffer(source, fetchedAt, getJstMonthKey(date), snapshotUrl, "official-html");
+  offer.advertisedMinRate = rate;
+  offer.confidence = "review";
+  offer.conditionsSummary =
+    "Wayback Machine から公式ページの当月スナップショットを取得し、汎用パーサで再診断。";
+  offer.failureReason = "スナップショット値のため自動推薦対象外";
+  offer.rateOptions = [{ id: "wayback-snapshot", label: "Wayback参考値", rate }];
+  offer.evidence = [
+    {
+      sourceKind: "official-html",
+      sourceUrl: snapshotUrl,
+      rate,
+      applicableMonth: offer.applicableMonth,
+      label: "Wayback Machine スナップショット",
+    },
+  ];
+  return offer;
+}
+
+export async function fetchBrowserRenderedOffer(source, fetchedAt, date, context) {
+  const browser = context.browserBinding;
+  if (!browser || typeof browser.launch !== "function") return null;
+  if (!source.rateUrls?.length) return null;
+  const targetUrl = source.rateUrls[0];
+  let session;
+  try {
+    session = await browser.launch();
+    const page = await session.newPage();
+    await page.goto(targetUrl, { waitUntil: "networkidle0", timeout: OFFICIAL_HTML_TIMEOUT_MS });
+    const html = await page.content();
+    const rate = extractRate(html, source);
+    if (rate === null) return null;
+    const offer = baseOffer(source, fetchedAt, getJstMonthKey(date), targetUrl, "official-html");
+    offer.advertisedMinRate = rate;
+    offer.confidence = "review";
+    offer.conditionsSummary =
+      "Browser Rendering で公式ページをJS実行付き取得し、汎用パーサで診断。";
+    offer.failureReason = "JS実行後の汎用診断値のため自動推薦対象外";
+    offer.rateOptions = [{ id: "browser-rendering", label: "Browser Rendering 診断値", rate }];
+    offer.evidence = [
+      {
+        sourceKind: "official-html",
+        sourceUrl: targetUrl,
+        rate,
+        applicableMonth: offer.applicableMonth,
+        label: "Cloudflare Browser Rendering",
+      },
+    ];
+    return offer;
+  } catch {
+    return null;
+  } finally {
+    try {
+      await session?.close?.();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function buildStaleOfferFromHistory(historyOffer, source, fetchedAt, date) {
+  if (!historyOffer || !Number.isFinite(historyOffer.advertisedMinRate)) return null;
+  const offer = {
+    ...historyOffer,
+    fetchedAt,
+    confidence: "review",
+    failureReason: `当月取得に全系統で失敗したため、前月以前の履歴値（${historyOffer.applicableMonth ?? "適用月不明"}）を参考表示しています。`,
+    conditionsSummary:
+      `${historyOffer.conditionsSummary ?? "履歴値"} 当月の公式確認は必須。自動推薦には使用しません。`,
+  };
+  offer.evidence = (historyOffer.evidence ?? []).map((evidence) => ({
+    ...evidence,
+    label: `${evidence.label}（履歴値）`,
+  }));
+  return offer;
+}
+
 function scoreDiagnosticContext(context, source) {
   let score = 0;
   if (/変動金利|住宅ローン|借換|借り換え/.test(context)) score += 8;
@@ -549,11 +762,15 @@ function decodeUtf8(bytes) {
   return new TextDecoder("utf-8").decode(bytes).replace(/^\uFEFF/, "");
 }
 
-export function createAdapterContext(fetchImpl = fetch) {
+export function createAdapterContext(fetchImpl = fetch, options = {}) {
   let kakakuPromise;
+  let mogecheckPromise;
+  let zuuPromise;
   const kakakuCompanyPromises = new Map();
   return {
     fetchImpl,
+    browserBinding: options.browserBinding,
+    historyOfferLookup: options.historyOfferLookup ?? null,
     getKakakuBytes() {
       kakakuPromise ??= fetchBounded(KAKAKU_URL, undefined, fetchImpl);
       return kakakuPromise;
@@ -567,6 +784,24 @@ export function createAdapterContext(fetchImpl = fetch) {
         );
       }
       return kakakuCompanyPromises.get(companyCode);
+    },
+    getMogecheckHtml() {
+      mogecheckPromise ??= fetchBounded(MOGECHECK_URL, undefined, fetchImpl, {
+        attempts: 1,
+        timeoutMs: OFFICIAL_HTML_TIMEOUT_MS,
+      })
+        .then(decodeUtf8)
+        .catch(() => null);
+      return mogecheckPromise;
+    },
+    getZuuHtml() {
+      zuuPromise ??= fetchBounded(ZUU_ONLINE_URL, undefined, fetchImpl, {
+        attempts: 1,
+        timeoutMs: OFFICIAL_HTML_TIMEOUT_MS,
+      })
+        .then(decodeUtf8)
+        .catch(() => null);
+      return zuuPromise;
     },
   };
 }
@@ -687,6 +922,23 @@ function selectBestOffer(structured, officialHtml, kakaku, diamond, extraOffers 
   return officialHtml ? { ...officialHtml, evidence: getEvidence(offers) } : null;
 }
 
+async function fetchAuxiliaryOffer(source, fetchedAt, date, context) {
+  const auxiliaryResults = await Promise.allSettled([
+    context
+      .getMogecheckHtml()
+      .then((html) => (html ? parseMogecheckArticle(html, source, fetchedAt, date) : null)),
+    context
+      .getZuuHtml()
+      .then((html) => (html ? parseZuuArticle(html, source, fetchedAt, date) : null)),
+    fetchWaybackOffer(source, fetchedAt, date, context),
+  ]);
+  for (const result of auxiliaryResults) {
+    const value = getSettledValue(result);
+    if (value) return value;
+  }
+  return null;
+}
+
 export async function fetchBankOffer(source, fetchedAt, date, context) {
   const results = await Promise.allSettled([
     fetchStructuredOffer(source, fetchedAt, date, context),
@@ -705,18 +957,32 @@ export async function fetchBankOffer(source, fetchedAt, date, context) {
   ]);
   const rankingKakaku = getSettledValue(results[2]);
   const companyKakaku = getSettledValue(results[3]);
-  const offer = selectBestOffer(
+  const primaryOffer = selectBestOffer(
     getSettledValue(results[0]),
     getSettledValue(results[1]),
     companyKakaku ?? rankingKakaku,
     getSettledValue(results[4]),
     companyKakaku && rankingKakaku ? [rankingKakaku] : [],
   );
-  if (offer) return offer;
+  if (primaryOffer) return primaryOffer;
+
+  // v9: 主系統が全敗した場合の段階フォールバック
+  const auxiliaryOffer = await fetchAuxiliaryOffer(source, fetchedAt, date, context);
+  if (auxiliaryOffer) return auxiliaryOffer;
+
+  const browserOffer = await fetchBrowserRenderedOffer(source, fetchedAt, date, context);
+  if (browserOffer) return browserOffer;
+
+  if (context.historyOfferLookup) {
+    const historyOffer = await context.historyOfferLookup(source.id);
+    const staleOffer = buildStaleOfferFromHistory(historyOffer, source, fetchedAt, date);
+    if (staleOffer) return staleOffer;
+  }
+
   const messages = results
     .filter((result) => result.status === "rejected")
     .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
   throw new Error(messages.join(" / ") || "公式ページとまとめサイトから金利を特定できませんでした。");
 }
 
-export { BANK_RATE_SOURCES, KAKAKU_URL };
+export { BANK_RATE_SOURCES, KAKAKU_URL, MOGECHECK_URL, ZUU_ONLINE_URL, getPreviousMonthKey };

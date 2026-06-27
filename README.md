@@ -54,6 +54,13 @@ npm run build
 6. [金利取得Worker手順](docs/rate-worker.md)に従い、毎日06:00 JSTのCron Workerをデプロイする。KV未設定でもPages APIはその場で取得を実行する
 7. デプロイ後、表示、JSON保存・復元、銀行比較表の取得元・適用年月・条件適合金利を確認する
 
+## 金利自動取得と手入力補正（2026年06月25日 v9）
+
+- 取得失敗の段階フォールバックを5系統に拡張：モゲチェック銀行別記事、ZUU online 月次まとめ、Wayback Machine の当月スナップショット、KV履歴の前月値、Cloudflare Browser Rendering（`BROWSER` バインディングがある場合のみCron内で実行）。
+- 前月履歴があれば「前月値（参考）」として比較表に表示。取得失敗時のUI行は淡色化し、当月の公式値手入力導線をその場で強調する。前月値・Wayback値・Browser Rendering値は表示のみで、借換え推薦には引き続き当月公式値または公式確認済み手入力だけを使う。
+- Cron Worker側のKV保存は当月成功分に限る。stale結果で当月履歴を上書きしない設計。
+- 画面ビルド表示 `2026/06/25 v9` / Service Worker `mortgage-rate-checker-v9-20260625`。
+
 ## 金利自動取得と手入力補正（2026年06月24日 v8）
 
 - KV/Cron設定済みの場合は毎日06:00 JSTに独立Cloudflare Workerが銀行単位で取得し、`GET /api/rates` は保存済み結果を返します。KVが未設定または空の場合は、その場で全銀行を取得して表示不能を回避します。

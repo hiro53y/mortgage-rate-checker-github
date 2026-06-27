@@ -228,19 +228,22 @@ export default function App() {
         return {
           ...row,
           rateOffer: item.offer,
-          lastGoodRateOffer: item.offer,
+          lastGoodRateOffer: item.status === "stale" ? row.lastGoodRateOffer : item.offer,
           autoFetchedRate: item.offer.advertisedMinRate,
           advertisedMinRate: item.offer.advertisedMinRate,
           rateStatus:
             row.manualOverrideRate !== undefined
               ? "manual"
-              : item.offer.sourceKind === "aggregator"
-                ? "reference"
-                : item.status === "needs-review"
+              : item.status === "stale"
+                ? "stale"
+                : item.offer.sourceKind === "aggregator"
                   ? "reference"
-                  : "auto",
+                  : item.status === "needs-review"
+                    ? "reference"
+                    : "auto",
           lastFetchedAt: item.fetchedAt,
-          fetchError: item.status === "needs-review" ? item.message : undefined,
+          fetchError:
+            item.status === "needs-review" || item.status === "stale" ? item.message : undefined,
         };
       });
 

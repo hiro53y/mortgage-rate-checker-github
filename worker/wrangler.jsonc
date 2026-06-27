@@ -21,4 +21,9 @@
       "preview_id": "00000000000000000000000000000000"
     }
   ]
+  // v9: Browser Renderingを有効化する場合は、下の "browser" を有効化し
+  // Cloudflare Dashboardでこの Worker に Browser Rendering バインディングを追加する。
+  // バインディング名は BROWSER 固定。Workers Paid プラン以上が必要。
+  // ,
+  // "browser": { "binding": "BROWSER" }
 }
