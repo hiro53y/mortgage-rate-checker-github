@@ -160,8 +160,11 @@ export function isLatestFetchedCandidate(row: BankComparisonRow, date = new Date
 }
 
 export function isBaseComparisonRow(row: BankComparisonRow): boolean {
+  // v12: rowKind が明示されている行はそれを正とする（文字列一致の誤判定防止）。
+  if (row.rowKind !== undefined) {
+    return row.rowKind === "base";
+  }
   return (
-    row.rowKind === "base" ||
     row.netBenefit === null ||
     row.bankName.includes("選択中シナリオ") ||
     row.bankName.includes("現在条件")
@@ -255,8 +258,8 @@ export function recalculateComparisonRow(
     eligibility: hasVerifiedManual ? "eligible" : (offerEvaluation?.eligibility ?? "unknown"),
     eligibilityReason: hasVerifiedManual
       ? row.manualApplicableMonth
-        ? `公式URL・確認日・適用年月（${row.manualApplicableMonth}）を登録した手入力値`
-        : "公式URL・確認日を登録した手入力値"
+        ? `公式ページ確認済みとして登録した手入力値（適用年月 ${row.manualApplicableMonth}）`
+        : "公式ページ確認済みとして登録した手入力値"
       : (offerEvaluation?.reason ?? "取得条件がありません。"),
     applicableMonth: hasVerifiedManual
       ? (row.manualApplicableMonth ?? row.rateOffer?.applicableMonth)
@@ -304,7 +307,12 @@ export function recalculateComparisonRows(
   paymentBasis = getLoanPaymentBasisStatus(loan),
 ): BankComparisonRow[] {
   const recalculatedRows = rows.map((row) => recalculateComparisonRow(row, loan, paymentBasis));
-  const lowestFetchedCandidate = selectBestRefinanceCandidate(recalculatedRows);
+  const lowestFetchedCandidate = selectBestRefinanceCandidate(
+    recalculatedRows,
+    undefined,
+    undefined,
+    paymentBasis.todayIsoDate,
+  );
   return recalculatedRows.map((row) => ({
     ...row,
     isPriorityCandidate: lowestFetchedCandidate?.id === row.id,
@@ -340,13 +348,22 @@ export function deriveComparisonRowsFromLoan(
   return recalculateComparisonRows(rows, loan, getLoanPaymentBasisStatus(loan, todayIsoDate));
 }
 
+function toReferenceDate(todayIsoDate?: string): Date {
+  if (todayIsoDate && /^\d{4}-\d{2}-\d{2}$/.test(todayIsoDate)) {
+    return new Date(`${todayIsoDate}T00:00:00`);
+  }
+  return new Date();
+}
+
 export function selectBestRefinanceCandidate(
   rows: BankComparisonRow[],
   refinanceCosts?: RefinanceCostBreakdown,
   loan?: LoanProfile,
   todayIsoDate?: string,
 ): BankComparisonRow | null {
-  const candidates = rows.filter((row) => isLatestFetchedCandidate(row));
+  // v12: 基準日を当月判定まで貫通させる（テスト・再計算の日付一貫性）。
+  const referenceDate = toReferenceDate(todayIsoDate);
+  const candidates = rows.filter((row) => isLatestFetchedCandidate(row, referenceDate));
   if (candidates.length === 0) {
     return null;
   }
@@ -384,9 +401,12 @@ export function selectBestRefinanceCandidate(
   return sortedByRate[0] ?? null;
 }
 
-function getCandidateReviewWarning(row: BankComparisonRow): string | undefined {
+function getCandidateReviewWarning(
+  row: BankComparisonRow,
+  referenceDate = new Date(),
+): string | undefined {
   const warnings: string[] = [];
-  if (!isLatestFetchedCandidate(row)) {
+  if (!isLatestFetchedCandidate(row, referenceDate)) {
     warnings.push("最新金利を自動取得できていない候補");
   }
   if (row.sourceKind === "manual-verified" && !row.manualVerifiedAt) warnings.push("手入力の公式確認が未完了");
@@ -438,7 +458,7 @@ export function buildRefinanceResultFromCurrentLoan(
   );
   const averageMonthlyDifference = (monthlyDifference * 12 + bonusDifference * 2) / 12;
   const paybackMonths = calculatePaybackMonths(totalCosts, averageMonthlyDifference);
-  const candidateReviewWarning = getCandidateReviewWarning(row);
+  const candidateReviewWarning = getCandidateReviewWarning(row, toReferenceDate(todayIsoDate));
 
   return {
     bankRateId: row.id,

@@ -247,6 +247,12 @@ export type RefinanceCostBreakdown = {
   prepaymentFee: number;
 };
 
+export type MomijiLowerRateState = {
+  rate: number;
+  applicableMonth?: string;
+  fetchedAt?: string;
+};
+
 export type AppStorage = {
   loanProfile: LoanProfile;
   scenarios: ScenarioRate[];
@@ -254,6 +260,7 @@ export type AppStorage = {
   comparisonRows: BankComparisonRow[];
   refinanceResult: RefinanceResult | null;
   refinanceCostBreakdown: RefinanceCostBreakdown;
+  momijiLowerRate?: MomijiLowerRateState;
   lastCheckedAt?: string;
   rateFetchState?: {
     checkedMonth?: string;

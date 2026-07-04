@@ -4,6 +4,7 @@ import { defaultLoanProfile } from "../src/lib/sampleData.ts";
 import {
   INSURANCE_ADDON_ESTIMATE,
   getEstimatedRate,
+  getLoanPaymentBasisStatus,
   isLatestFetchedCandidate,
   recalculateComparisonRow,
   recalculateComparisonRows,
@@ -332,7 +333,13 @@ test("v11: 手入力のみ（公式確認なし）は推薦に選ばれず、公
     note: "test",
     manualOverrideRate: 0.45,
   };
-  const results = recalculateComparisonRows([officialRow, unverifiedManualRow], loan({ desiredInsuranceCoverage: "standard" }));
+  // v12: 基準日をfixtureの適用年月（2026-06）に固定する。
+  const fixedLoan = loan({ desiredInsuranceCoverage: "standard" });
+  const results = recalculateComparisonRows(
+    [officialRow, unverifiedManualRow],
+    fixedLoan,
+    getLoanPaymentBasisStatus(fixedLoan, "2026-06-21"),
+  );
   const manualResult = results.find((r) => r.id === "manual-row-unverified");
   const officialResult = results.find((r) => r.id === "official-row");
   assert.equal(manualResult?.isPriorityCandidate, false);

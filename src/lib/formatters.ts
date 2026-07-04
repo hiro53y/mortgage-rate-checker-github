@@ -85,7 +85,8 @@ export function formatPaybackMonths(months: number | null): string {
 }
 
 export function parseNumberInput(value: string): number {
-  const normalized = value.replace(/,/g, "").trim();
+  // v12: 全角数字・全角記号（NFKC正規化）とカンマ・空白に対応する。
+  const normalized = value.normalize("NFKC").replace(/[,\s]/g, "");
   if (normalized === "") {
     return 0;
   }

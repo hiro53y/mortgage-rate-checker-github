@@ -5,13 +5,14 @@ import { InfoRow } from "../components/InfoRow";
 import { ScenarioCard } from "../components/ScenarioCard";
 import { SectionTitle } from "../components/SectionTitle";
 import { formatRate, formatSignedRate } from "../lib/formatters";
-import { MOMIJI_LOWER_RATE } from "../lib/sampleData";
 import { calculateRateDifference, currentRateNegotiationSummary } from "../lib/scenarioMath";
 import type { LoanProfile, ScenarioRate } from "../types";
 
 type ScenarioPageProps = {
   loan: LoanProfile;
   scenarios: ScenarioRate[];
+  lowerRate: number;
+  lowerRateApplicableMonth?: string;
   onComparison: () => void;
   onOpenOfficial: () => void;
 };
@@ -19,11 +20,13 @@ type ScenarioPageProps = {
 export function ScenarioPage({
   loan,
   scenarios,
+  lowerRate,
+  lowerRateApplicableMonth,
   onComparison,
   onOpenOfficial,
 }: ScenarioPageProps) {
-  const rateDifference = calculateRateDifference(loan.currentRate, MOMIJI_LOWER_RATE);
-  const summary = currentRateNegotiationSummary(loan.currentRate, MOMIJI_LOWER_RATE);
+  const rateDifference = calculateRateDifference(loan.currentRate, lowerRate);
+  const summary = currentRateNegotiationSummary(loan.currentRate, lowerRate);
 
   return (
     <div className="space-y-4">
@@ -38,14 +41,14 @@ export function ScenarioPage({
         <dl>
           <InfoRow label="現在の適用金利" value={formatRate(loan.currentRate)} emphasis />
           <InfoRow
-            label="もみじ銀行の新規向け下限金利"
-            value={formatRate(MOMIJI_LOWER_RATE)}
+            label={`もみじ銀行の新規向け下限金利${lowerRateApplicableMonth ? `（${lowerRateApplicableMonth} 自動取得）` : "（基準値）"}`}
+            value={formatRate(lowerRate)}
             emphasis
           />
           <InfoRow label="差（現在 - 下限金利）" value={formatSignedRate(rateDifference)} />
         </dl>
         <p className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-navy-800">
-          判定式: {formatRate(loan.currentRate)} - {formatRate(MOMIJI_LOWER_RATE)} ={" "}
+          判定式: {formatRate(loan.currentRate)} - {formatRate(lowerRate)} ={" "}
           {formatSignedRate(rateDifference)}
         </p>
         <p className="rounded-lg bg-white px-3 py-3 text-sm leading-6 text-slate-700">
@@ -63,7 +66,7 @@ export function ScenarioPage({
           <ScenarioCard
             key={scenario.id}
             scenario={scenario}
-            lowerRate={MOMIJI_LOWER_RATE}
+            lowerRate={lowerRate}
             currentRate={loan.currentRate}
           />
         ))}

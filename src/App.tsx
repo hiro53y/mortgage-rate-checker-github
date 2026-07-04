@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import {
   buildRefinanceResultFromCurrentLoan,
@@ -48,8 +48,16 @@ function getDefaultView(hasSavedData: boolean): ViewName {
   return hasSavedData ? "home" : "setup";
 }
 
+export function getMomijiLowerRate(data: AppStorage): number {
+  return data.momijiLowerRate?.rate ?? MOMIJI_LOWER_RATE;
+}
+
 function deriveAppDataFromCurrentLoan(data: AppStorage): AppStorage {
-  const scenarios = deriveScenariosFromLoan(data.scenarios, data.loanProfile, MOMIJI_LOWER_RATE);
+  const scenarios = deriveScenariosFromLoan(
+    data.scenarios,
+    data.loanProfile,
+    getMomijiLowerRate(data),
+  );
   const comparisonRows = deriveComparisonRowsFromLoan(
     ensureComparisonRowsIncludeBankSources(data.comparisonRows, data.bankSources),
     data.loanProfile,
@@ -62,7 +70,11 @@ function deriveAppDataFromCurrentLoan(data: AppStorage): AppStorage {
   return {
     ...data,
     scenarios,
-    comparisonRows,
+    // v12: 星印（優先候補）と借換え画面の候補選定を一致させる（諸費用込みの選定を正とする）。
+    comparisonRows: comparisonRows.map((row) => ({
+      ...row,
+      isPriorityCandidate: refinanceCandidate?.id === row.id,
+    })),
     refinanceResult: refinanceCandidate
       ? buildRefinanceResultFromCurrentLoan(
           refinanceCandidate,
@@ -88,6 +100,8 @@ export default function App() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isFetchingRates, setIsFetchingRates] = useState(false);
+  // v12: 同一セッション内で同じ月の自動取得を繰り返さない（無限ループ防止）。
+  const autoFetchAttemptedMonthRef = useRef<string | null>(null);
 
   useEffect(() => {
     const displayModeQuery = window.matchMedia("(display-mode: standalone)");
@@ -258,12 +272,16 @@ export default function App() {
         return;
       }
       const month = getCurrentMonthKey();
-      if (
-        !force &&
-        !isMonthlyAutoFetchDue(appData.rateFetchState?.checkedMonth)
-      ) {
-        return;
+      if (!force) {
+        if (!isMonthlyAutoFetchDue(appData.rateFetchState?.checkedMonth)) {
+          return;
+        }
+        // v12: サーバが前月キャッシュを返した場合等の同一セッション内の再取得ループを防ぐ。
+        if (autoFetchAttemptedMonthRef.current === month) {
+          return;
+        }
       }
+      autoFetchAttemptedMonthRef.current = month;
 
       setIsFetchingRates(true);
       const attemptAt = new Date().toISOString();
@@ -271,10 +289,24 @@ export default function App() {
         const response = await fetchLatestRates(force);
         const hasFetchedRate = response.items.some((item) => Boolean(item.offer));
         const comparisonRows = applyFetchedRates(appData.comparisonRows, response);
+        // v12: もみじ銀行の新規向け下限金利は自動取得値があればそれを使う。
+        const momijiItem = response.items.find(
+          (item) => item.bankRateSourceId === "momiji",
+        );
+        const momijiOffer = momijiItem?.offer ?? momijiItem?.lastGoodOffer;
+        const momijiLowerRate =
+          momijiOffer?.advertisedMinRate !== undefined
+            ? {
+                rate: momijiOffer.advertisedMinRate,
+                applicableMonth: momijiOffer.applicableMonth,
+                fetchedAt: momijiItem?.fetchedAt,
+              }
+            : appData.momijiLowerRate;
         persist(
           {
             ...appData,
             comparisonRows,
+            momijiLowerRate,
             rateFetchState: {
               checkedMonth: response.month,
               lastAttemptAt: attemptAt,
@@ -292,7 +324,8 @@ export default function App() {
           {
             ...appData,
             rateFetchState: {
-              checkedMonth: month,
+              // v12: 失敗時は checkedMonth を進めない（次回起動時に自動再試行できるようにする）。
+              checkedMonth: appData.rateFetchState?.checkedMonth,
               lastAttemptAt: attemptAt,
               lastSuccessfulAt: appData.rateFetchState?.lastSuccessfulAt,
               source: appData.rateFetchState?.source ?? "sample",
@@ -357,7 +390,7 @@ export default function App() {
           message:
             manualRate !== null
               ? verification.confirmed
-                ? "公式URL・適用年月を確認済みの手入力値で概算再判定しました。"
+                ? "公式ページ確認済みの手入力値で概算再判定しました。"
                 : "未確認の手入力補正値で概算表示しました。借換え推薦には使用しません。"
               : "手入力補正を解除し、自動取得値またはサンプル値で概算再判定しました。",
         },
@@ -400,6 +433,8 @@ export default function App() {
           <ScenarioPage
             loan={appData.loanProfile}
             scenarios={appData.scenarios}
+            lowerRate={getMomijiLowerRate(appData)}
+            lowerRateApplicableMonth={appData.momijiLowerRate?.applicableMonth}
             onComparison={() => setActiveView("comparison")}
             onOpenOfficial={() => openBank(findMomijiSource(appData))}
           />
@@ -448,6 +483,8 @@ export default function App() {
           <HomePage
             loan={appData.loanProfile}
             paymentBasis={paymentBasis}
+            lowerRate={getMomijiLowerRate(appData)}
+            lowerRateApplicableMonth={appData.momijiLowerRate?.applicableMonth}
             lastCheckedAt={appData.lastCheckedAt}
             onCheckLatest={() => openBank(findMomijiSource(appData))}
             onScenario={() => setActiveView("scenario")}

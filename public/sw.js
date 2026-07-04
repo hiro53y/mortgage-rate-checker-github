@@ -1,4 +1,4 @@
-const CACHE_NAME = "mortgage-rate-checker-v11-20260627";
+const CACHE_NAME = "mortgage-rate-checker-v12-20260704";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -38,6 +38,25 @@ self.addEventListener("fetch", (event) => {
 
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) {
+    return;
+  }
+
+  // v12: APIはキャッシュせず、失敗時もHTMLではなくJSONエラーを返す。
+  if (requestUrl.pathname.startsWith("/api/")) {
+    event.respondWith(
+      fetch(event.request).catch(
+        () =>
+          new Response(
+            JSON.stringify({
+              error: "オフラインのため金利データを取得できません。通信環境を確認して再取得してください。"
+            }),
+            {
+              status: 503,
+              headers: { "content-type": "application/json; charset=utf-8" }
+            }
+          )
+      )
+    );
     return;
   }
 

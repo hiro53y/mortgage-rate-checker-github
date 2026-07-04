@@ -180,7 +180,7 @@ describe("comparisonMath", () => {
     assert.equal(rows[0].monthlyPayment, 90916);
     assert.equal(rows[0].bonusPayment, 114283);
 
-    const candidate = selectBestRefinanceCandidate(rows);
+    const candidate = selectBestRefinanceCandidate(rows, undefined, undefined, "2026-06-13");
     assert.ok(candidate);
     assert.equal(candidate.id, "mufg-row");
     assert.equal(candidate.rowKind, "candidate");
@@ -388,3 +388,4 @@ describe("comparisonMath", () => {
     assert.equal(rows.filter((candidateRow) => candidateRow.bankName.includes("もみじ")).length, 1);
   });
 });
+// v12: 日付固定（2026-06-13）で候補選定の回帰を防ぐ。

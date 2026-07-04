@@ -2,6 +2,38 @@
 
 
 
+## 2026-07-04 v12 バグ修正まとめ（コードレビュー起点）
+
+### 修正した不具合
+1. **月替わり時の無限取得ループ**
+   - サーバ: `getCachedRates`（rateService.js）が前月の `rates:latest` を返さないよう当月チェックを追加。キャッシュが前月ならPages Functionはライブ取得にフォールバックする。
+   - クライアント: `App.tsx` に `autoFetchAttemptedMonthRef` を追加し、同一セッション内で同じ月の自動取得は1回のみ。取得失敗時は `checkedMonth` を進めず、翌セッションで自動再試行する。
+2. **手入力補正の入力消失**
+   - `ComparisonTable` の useEffect リセットを廃止し、「保存値 + ユーザー編集値（ドラフト）」方式に変更。自動取得完了で rows が再生成されても入力途中の値は保持される。再判定実行時にドラフトを破棄。
+3. **設定画面で追加した銀行の消失**
+   - `validateAppStorage` がサンプル外IDの銀行も保持するように修正（コード管理フィールドの上書き保護は維持）。
+4. **もみじ下限金利のハードコード**
+   - `AppStorage.momijiLowerRate` を追加。/api/rates のもみじ取得値（advertisedMinRate）で更新し、ホーム・試算・シナリオ派生に反映。未取得時は `MOMIJI_LOWER_RATE`（0.95）フォールバック。画面には「（YYYY-MM 自動取得）/（基準値）」を表示。
+5. **日付依存テスト**
+   - `selectBestRefinanceCandidate` / `getCandidateReviewWarning` に基準日（todayIsoDate）を貫通。`recalculateComparisonRows` は `paymentBasis.todayIsoDate` を使用。fixtureの2026-06と実行月のズレで毎月壊れる問題を解消。
+6. **Service Worker のAPIフォールバック**
+   - `/api/` はキャッシュせず、オフライン時は 503 のJSONエラーを返す（従来は index.html が返りJSONパースエラーになっていた）。CACHE_NAME は v12-20260704。
+7. **その他**
+   - ボーナス月表示の実データ化、全角数字入力対応（NFKC）、手入力文言の適正化（「公式URL登録済み」→「公式ページ確認済み」）、星印と借換え候補選定の統一、`isBaseComparisonRow` の rowKind 優先化、node_modules シンボリックリンクのgit追跡解除（.gitignore も `node_modules` に修正）。
+
+### 修正しないと合意した項目
+- サンプルデータの実ローン値（ユーザー判断で維持）
+- ボーナス返済の年2回前提（bonusMonths=6,12運用のため維持）
+- 残高内訳（毎月分+ボーナス分=合計）の整合チェック
+
+### 検証
+- `npm test` 全83件パス（テスト3件追加: ユーザー追加銀行の保持、momijiLowerRate復元）
+- `tsc -b` エラーなし
+- `vite build` はWindows側で `build.bat` 実行を推奨（Linux検証環境にrollupネイティブバイナリなし）
+
+
+
+
 ## 2026-06-27 v11 手入力推薦の緩和とデバッグ強化
 
 ### 課題

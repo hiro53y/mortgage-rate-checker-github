@@ -13,13 +13,14 @@ import {
   formatMoney,
   formatSignedRate,
 } from "../lib/formatters";
-import { MOMIJI_LOWER_RATE } from "../lib/sampleData";
 import { calculateRateDifference } from "../lib/scenarioMath";
 import type { LoanPaymentBasisStatus, LoanProfile } from "../types";
 
 type HomePageProps = {
   loan: LoanProfile;
   paymentBasis: LoanPaymentBasisStatus;
+  lowerRate: number;
+  lowerRateApplicableMonth?: string;
   lastCheckedAt?: string;
   onCheckLatest: () => void;
   onScenario: () => void;
@@ -30,13 +31,15 @@ type HomePageProps = {
 export function HomePage({
   loan,
   paymentBasis,
+  lowerRate,
+  lowerRateApplicableMonth,
   lastCheckedAt,
   onCheckLatest,
   onScenario,
   onComparison,
   onEdit,
 }: HomePageProps) {
-  const rateDifference = calculateRateDifference(loan.currentRate, MOMIJI_LOWER_RATE);
+  const rateDifference = calculateRateDifference(loan.currentRate, lowerRate);
   const [showMoney, setShowMoney] = useState(false);
   const maskedMoney = "*****";
   const moneyText = (value: number) => (showMoney ? formatMoney(value) : maskedMoney);
@@ -85,7 +88,9 @@ export function HomePage({
             {loan.currentRate.toFixed(3)}%
           </p>
           <p className="mt-2 text-xs leading-5 text-slate-600">
-            もみじ銀行の新規向け下限金利 {MOMIJI_LOWER_RATE.toFixed(3)}% との差:
+            もみじ銀行の新規向け下限金利 {lowerRate.toFixed(3)}%
+            {lowerRateApplicableMonth ? `（${lowerRateApplicableMonth} 自動取得）` : "（基準値）"}
+            との差:
             <span className="ml-1 font-bold text-navy-800">
               {formatSignedRate(rateDifference)}
             </span>
@@ -112,7 +117,7 @@ export function HomePage({
           <p className="mt-1 text-2xl font-black tracking-normal text-slate-950">
             {moneyText(loan.bonusPayment)}
           </p>
-          <p className="mt-1 text-xs text-slate-500">6月・12月</p>
+          <p className="mt-1 text-xs text-slate-500">{formatBonusMonths(loan.bonusMonths)}</p>
         </div>
       </div>
 
@@ -139,7 +144,7 @@ export function HomePage({
         <SectionTitle title="確認状況" subtitle="比較条件: 元利均等・がん団信込み" />
         <dl>
           <InfoRow label="前回確認日" value={formatDateTimeJa(lastCheckedAt)} />
-          <InfoRow label="比較対象金利" value={<RateBadge value={MOMIJI_LOWER_RATE} />} />
+          <InfoRow label="比較対象金利" value={<RateBadge value={lowerRate} />} />
         </dl>
       </Card>
 

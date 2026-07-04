@@ -1,5 +1,5 @@
 import { AlertTriangle, ExternalLink, RefreshCw, Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { BankComparisonRow, BankRateSource, ManualRateVerification } from "../types";
 import { formatDateTimeJa, formatManYen, formatMoney, formatRate } from "../lib/formatters";
 import { getRateStatus, getRateUsedForCalculation } from "../lib/comparisonMath";
@@ -84,31 +84,33 @@ export function ComparisonTable({
   onOpenBank,
   onRecalculate,
 }: ComparisonTableProps) {
+  // v12: 保存値をベースに「ユーザーが編集した値」だけを別途保持する。
+  // 自動取得完了などで rows が再生成されても、入力途中の値が消えない。
   const [manualInputs, setManualInputs] = useState<Record<string, string>>({});
   const [manualMonths, setManualMonths] = useState<Record<string, string>>({});
   const [manualConfirmed, setManualConfirmed] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    const nextInputs: Record<string, string> = {};
-    const nextMonths: Record<string, string> = {};
-    const nextConfirmed: Record<string, boolean> = {};
-    const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-    rows.forEach((row) => {
-      nextInputs[row.id] =
-        row.manualOverrideRate !== undefined ? String(row.manualOverrideRate) : "";
-      nextMonths[row.id] = row.manualApplicableMonth ?? currentMonth;
-      nextConfirmed[row.id] = Boolean(row.manualVerifiedAt);
-    });
-    setManualInputs(nextInputs);
-    setManualMonths(nextMonths);
-    setManualConfirmed(nextConfirmed);
-  }, [rows]);
+  const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+
+  const inputValueOf = (row: BankComparisonRow) =>
+    manualInputs[row.id] ??
+    (row.manualOverrideRate !== undefined ? String(row.manualOverrideRate) : "");
+  const monthValueOf = (row: BankComparisonRow) =>
+    manualMonths[row.id] ?? row.manualApplicableMonth ?? currentMonth;
+  const confirmedValueOf = (row: BankComparisonRow) =>
+    manualConfirmed[row.id] ?? Boolean(row.manualVerifiedAt);
+
+  const clearDraft = (rowId: string) => {
+    setManualInputs(({ [rowId]: _removed, ...rest }) => rest);
+    setManualMonths(({ [rowId]: _removed, ...rest }) => rest);
+    setManualConfirmed(({ [rowId]: _removed, ...rest }) => rest);
+  };
 
   const findSource = (row: BankComparisonRow) =>
     sources.find((source) => row.bankName.includes(source.bankName));
 
-  const parseManualRate = (rowId: string) => {
-    const value = manualInputs[rowId]?.trim();
+  const parseManualRate = (row: BankComparisonRow) => {
+    const value = inputValueOf(row).trim();
     if (!value) {
       return null;
     }
@@ -117,14 +119,19 @@ export function ComparisonTable({
   };
 
   const buildVerification = (
-    rowId: string,
+    row: BankComparisonRow,
     source: BankRateSource | undefined,
   ): ManualRateVerification => ({
-    rate: parseManualRate(rowId),
-    confirmed: Boolean(manualConfirmed[rowId]),
-    applicableMonth: manualMonths[rowId],
+    rate: parseManualRate(row),
+    confirmed: confirmedValueOf(row),
+    applicableMonth: monthValueOf(row),
     sourceUrl: source?.rateUrl,
   });
+
+  const handleRecalculate = (row: BankComparisonRow, source: BankRateSource | undefined) => {
+    onRecalculate(row.id, buildVerification(row, source));
+    clearDraft(row.id);
+  };
 
   return (
     <div className="space-y-3">
@@ -255,7 +262,7 @@ export function ComparisonTable({
                   aria-label={`${row.bankName}の手入力補正金利`}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-navy-600 focus:ring-4 focus:ring-navy-100"
                   placeholder="手入力補正 例 0.920"
-                  value={manualInputs[row.id] ?? ""}
+                  value={inputValueOf(row)}
                   onChange={(event) =>
                     setManualInputs((current) => ({
                       ...current,
@@ -267,7 +274,7 @@ export function ComparisonTable({
                   type="month"
                   aria-label={`${row.bankName}の手入力金利の適用年月`}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-navy-600 focus:ring-4 focus:ring-navy-100"
-                  value={manualMonths[row.id] ?? ""}
+                  value={monthValueOf(row)}
                   onChange={(event) =>
                     setManualMonths((current) => ({ ...current, [row.id]: event.target.value }))
                   }
@@ -276,7 +283,7 @@ export function ComparisonTable({
                   <input
                     type="checkbox"
                     className="mt-1 h-4 w-4"
-                    checked={Boolean(manualConfirmed[row.id])}
+                    checked={confirmedValueOf(row)}
                     onChange={(event) =>
                       setManualConfirmed((current) => ({ ...current, [row.id]: event.target.checked }))
                     }
@@ -304,7 +311,7 @@ export function ComparisonTable({
                   <Button
                     variant="primary"
                     className="min-h-10 px-3 py-2 text-xs"
-                    onClick={() => onRecalculate(row.id, buildVerification(row.id, source))}
+                    onClick={() => handleRecalculate(row, source)}
                   >
                     <RefreshCw className="h-4 w-4" aria-hidden="true" />
                     再判定
@@ -398,7 +405,7 @@ export function ComparisonTable({
                     aria-label={`${row.bankName}の手入力補正金利`}
                     className="w-28 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-navy-600 focus:ring-4 focus:ring-navy-100"
                     placeholder="例 0.920"
-                    value={manualInputs[row.id] ?? ""}
+                    value={inputValueOf(row)}
                     onChange={(event) =>
                       setManualInputs((current) => ({
                         ...current,
@@ -409,7 +416,7 @@ export function ComparisonTable({
                   <input
                     type="month"
                     className="mt-2 w-28 rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
-                    value={manualMonths[row.id] ?? ""}
+                    value={monthValueOf(row)}
                     onChange={(event) =>
                       setManualMonths((current) => ({ ...current, [row.id]: event.target.value }))
                     }
@@ -418,7 +425,7 @@ export function ComparisonTable({
                     <input
                       type="checkbox"
                       className="mt-1 h-4 w-4"
-                      checked={Boolean(manualConfirmed[row.id])}
+                      checked={confirmedValueOf(row)}
                       onChange={(event) =>
                         setManualConfirmed((current) => ({ ...current, [row.id]: event.target.checked }))
                       }
@@ -486,7 +493,7 @@ export function ComparisonTable({
                   <Button
                     variant="primary"
                     className="min-h-9 px-3 py-2 text-xs"
-                    onClick={() => onRecalculate(row.id, buildVerification(row.id, source))}
+                    onClick={() => handleRecalculate(row, source)}
                   >
                     <RefreshCw className="h-4 w-4" aria-hidden="true" />
                     再判定

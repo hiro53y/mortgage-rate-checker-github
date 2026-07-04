@@ -122,9 +122,12 @@ async function writeOfferHistory(kv, source, offer, month) {
   ]);
 }
 
-export async function getCachedRates(env) {
+export async function getCachedRates(env, date = new Date()) {
   const cached = await getJson(env?.RATE_CACHE, LATEST_PAYLOAD_KEY);
-  return cached ? { ...cached, cached: true } : null;
+  if (!cached) return null;
+  // v12: 前月のキャッシュを当月データとして返さない（クライアント側の再取得ループ防止）。
+  if (cached.month !== getJstMonthKey(date)) return null;
+  return { ...cached, cached: true };
 }
 
 export async function refreshAllRates(
