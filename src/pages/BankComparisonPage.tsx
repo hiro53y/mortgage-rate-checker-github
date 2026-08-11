@@ -46,7 +46,9 @@ export function BankComparisonPage({
   onRecalculateRow,
   onRefinance,
 }: BankComparisonPageProps) {
-  const hasFetchedRefinanceCandidate = rows.some((row) => isLatestFetchedCandidate(row));
+  const hasFetchedRefinanceCandidate = rows.some((row) =>
+    isLatestFetchedCandidate(row, new Date(), sources),
+  );
 
   return (
     <div className="space-y-4">

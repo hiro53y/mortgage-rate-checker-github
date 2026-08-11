@@ -53,13 +53,16 @@ test("v12: 設定画面で追加したサンプル外の銀行がリロード後
   const restored = validateAppStorage(saved);
   assert.ok(restored);
   assert.ok(restored.bankSources.some((source) => source.id === "user-added-bank"));
-  // サンプル銀行のコード管理フィールドは上書きされない
   assert.ok(restored.bankSources.some((source) => source.adapter === "netbk-jsonp"));
 });
 
 test("v12: momijiLowerRate が保存JSONから復元される", () => {
   const saved = createSampleAppStorage() as unknown as Record<string, unknown>;
-  saved.momijiLowerRate = { rate: 0.975, applicableMonth: "2026-07", fetchedAt: "2026-07-01T00:00:00.000Z" };
+  saved.momijiLowerRate = {
+    rate: 0.975,
+    applicableMonth: "2026-07",
+    fetchedAt: "2026-07-01T00:00:00.000Z",
+  };
   const restored = validateAppStorage(saved);
   assert.ok(restored);
   assert.equal(restored.momijiLowerRate?.rate, 0.975);
@@ -70,4 +73,12 @@ test("v12: momijiLowerRate が保存JSONから復元される", () => {
   const restoredInvalid = validateAppStorage(savedInvalid);
   assert.ok(restoredInvalid);
   assert.equal(restoredInvalid.momijiLowerRate, undefined);
+
+  for (const invalidRate of [0, -0.1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const savedNonPositive = createSampleAppStorage() as unknown as Record<string, unknown>;
+    savedNonPositive.momijiLowerRate = { rate: invalidRate };
+    const restoredNonPositive = validateAppStorage(savedNonPositive);
+    assert.ok(restoredNonPositive);
+    assert.equal(restoredNonPositive.momijiLowerRate, undefined);
+  }
 });

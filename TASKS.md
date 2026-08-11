@@ -11,22 +11,21 @@
 
 ## 完了
 
+- [x] v12精度改善: 年月・日付判定を `Asia/Tokyo` に統一し、JST月境界テストを追加
+- [x] v12精度改善: 手入力推薦を正の有限金利・有効な確認日時・JST当月・HTTPS・登録済み公式host一致に限定
+- [x] v12精度改善: 前月・未入力・不正年月・非公式host・stale値を保持したまま参考表示へ降格し、★/借換え候補から除外
+- [x] v12精度改善: `rates:latest` のfresh/stale判定、stale時ライブ再取得、失敗時の旧証跡付き全行stale応答を実装
+- [x] v12精度改善: `rates:verified-latest` / `rates:verified-history` を導入し、適格な旧KVだけを新キーへ移行
+- [x] v12精度改善: API schema 12、画面/SW v12、Worker deploy停止ガード、運用runbookを更新
+- [x] v12精度改善: 自動テスト全102件とTypeScript型検査に成功
+- [x] v12精度改善: 初回全銀行取得失敗をfreshとしてKV固定せず、次回通常GETで再試行
+- [x] v12運用安全性: 独立Cron Workerの `workers.dev` 公開を無効化し、手動refreshをtoken未設定時にfail-closed化
 - [x] v12: 月替わり時の金利取得無限ループを修正（サーバ側キャッシュの当月チェック + クライアント側セッション内試行ガード）
-- [x] v12: 取得失敗時に checkedMonth を進めない（翌セッションで自動再試行できるように修正）
-- [x] v12: 比較表の手入力補正が自動取得完了時に消える問題を修正（ユーザー編集値を別管理に変更）
-- [x] v12: 設定画面で追加したサンプル外の銀行がリロードで消える問題を修正（validateAppStorage）
-- [x] v12: もみじ銀行の新規向け下限金利を自動取得値で更新（momijiLowerRate。取得不能時は基準値0.95にフォールバック）
-- [x] v12: selectBestRefinanceCandidate 等に基準日を貫通させ、日付依存で毎月壊れるテストを修正
-- [x] v12: Service Worker が /api/ 失敗時に index.html を返す問題を修正（JSONエラー応答に変更、APIはキャッシュしない）
-- [x] v12: ホームのボーナス月表示ハードコード（6月・12月）を実データ表示に修正
-- [x] v12: 手入力値の「公式URL登録済み」文言を実態（公式ページ確認済み）に修正
-- [x] v12: 数値入力の全角数字対応（NFKC正規化）
-- [x] v12: 星印（優先候補）と借換え画面の候補選定を諸費用込み選定で統一
-- [x] v12: isBaseComparisonRow は rowKind を優先判定に変更
-- [x] v12: git追跡されていた node_modules シンボリックリンクを追跡解除
-- [x] v12: テスト3件追加（ユーザー追加銀行の保持、momijiLowerRate復元）。全83件パス
-- [x] v12: Service Worker / バージョン表示を v12-20260704 に更新
-
+- [x] v12: 取得失敗時に checkedMonth を進めない（翌セッションで自動再試行）
+- [x] v12: 比較表の手入力ドラフトを自動取得後も保持
+- [x] v12: ユーザー追加銀行と `momijiLowerRate` を保存・復元
+- [x] v12: Service Workerで `/api/` をキャッシュせず、オフライン時に503 JSONを返す
+- [x] v12: ボーナス月表示、全角数値、星印と借換え候補、`rowKind` 判定を修正
 - [x] v11: 手入力上書きの推薦ロジックを緩和（公式確認チェック+HTTPS sourceUrlで推薦対象、applicableMonth任意化）
 - [x] v11: ComparisonTableに「公式確認済みチェックで推薦対象になる」説明文を追加（モバイル/デスクトップ）
 - [x] v11: rateEligibility/rateEstimation テストに 9 件追加。全 81 件パス

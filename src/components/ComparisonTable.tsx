@@ -1,8 +1,15 @@
 import { AlertTriangle, ExternalLink, RefreshCw, Star } from "lucide-react";
 import { useState } from "react";
 import type { BankComparisonRow, BankRateSource, ManualRateVerification } from "../types";
-import { formatDateTimeJa, formatManYen, formatMoney, formatRate } from "../lib/formatters";
+import {
+  formatDateTimeJa,
+  formatManYen,
+  formatMoney,
+  formatRate,
+  parseNumberInput,
+} from "../lib/formatters";
 import { getRateStatus, getRateUsedForCalculation } from "../lib/comparisonMath";
+import { getJstMonthKey } from "../lib/jstDate";
 import { Button } from "./Button";
 import { InfoRow } from "./InfoRow";
 
@@ -18,7 +25,7 @@ const statusLabels: Record<NonNullable<BankComparisonRow["rateStatus"]>, string>
   auto: "自動取得",
   manual: "手入力",
   reference: "参考値",
-  stale: "前月値（参考）",
+  stale: "保存値（参考）",
   failed: "取得失敗",
 };
 
@@ -84,22 +91,19 @@ export function ComparisonTable({
   onOpenBank,
   onRecalculate,
 }: ComparisonTableProps) {
-  // v12: 保存値をベースに「ユーザーが編集した値」だけを別途保持する。
-  // 自動取得完了などで rows が再生成されても、入力途中の値が消えない。
   const [manualInputs, setManualInputs] = useState<Record<string, string>>({});
   const [manualMonths, setManualMonths] = useState<Record<string, string>>({});
   const [manualConfirmed, setManualConfirmed] = useState<Record<string, boolean>>({});
 
-  const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-
+  const currentMonth = getJstMonthKey();
   const inputValueOf = (row: BankComparisonRow) =>
     manualInputs[row.id] ??
     (row.manualOverrideRate !== undefined ? String(row.manualOverrideRate) : "");
   const monthValueOf = (row: BankComparisonRow) =>
-    manualMonths[row.id] ?? row.manualApplicableMonth ?? currentMonth;
+    manualMonths[row.id] ??
+    (row.manualOverrideRate !== undefined ? (row.manualApplicableMonth ?? "") : currentMonth);
   const confirmedValueOf = (row: BankComparisonRow) =>
     manualConfirmed[row.id] ?? Boolean(row.manualVerifiedAt);
-
   const clearDraft = (rowId: string) => {
     setManualInputs(({ [rowId]: _removed, ...rest }) => rest);
     setManualMonths(({ [rowId]: _removed, ...rest }) => rest);
@@ -114,7 +118,7 @@ export function ComparisonTable({
     if (!value) {
       return null;
     }
-    const parsed = Number(value);
+    const parsed = parseNumberInput(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   };
 
@@ -127,7 +131,6 @@ export function ComparisonTable({
     applicableMonth: monthValueOf(row),
     sourceUrl: source?.rateUrl,
   });
-
   const handleRecalculate = (row: BankComparisonRow, source: BankRateSource | undefined) => {
     onRecalculate(row.id, buildVerification(row, source));
     clearDraft(row.id);
@@ -291,7 +294,7 @@ export function ComparisonTable({
                   公式ページで借換え・変動・団信条件を確認済み
                 </label>
                 <p className="text-[11px] leading-4 text-slate-500">
-                  チェックを入れて再判定すると、入力値が借換え推薦の対象になります（チェックなしは参考表示のみ）。
+                  公式確認・HTTPS公式URL・適用年月が当月（JST）の場合のみ借換え推薦の対象になります。それ以外は参考表示です。
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {source ? (
@@ -377,7 +380,9 @@ export function ComparisonTable({
                   ) : null}
                   {isDimmed ? (
                     <p className="mt-1 text-xs font-semibold text-amber-800">
-                      推定値を表示中。正確な値は手入力補正で当月値を入力してください。
+                      {status === "stale"
+                        ? "保存済みの参考値を表示中。当月の公式値を確認してください。"
+                        : "取得に失敗しました。公式ページで当月値を確認してください。"}
                     </p>
                   ) : null}
                 </td>
@@ -433,7 +438,7 @@ export function ComparisonTable({
                     公式確認済み
                   </label>
                   <p className="mt-1 w-40 text-[11px] leading-4 text-slate-500">
-                    チェックすると借換え推薦の対象になります（チェックなしは参考表示のみ）。
+                    公式確認・HTTPS公式URL・適用年月が当月（JST）の場合のみ推薦対象です。それ以外は参考表示です。
                   </p>
                   <p className="mt-1 text-xs text-slate-500">空欄なら自動/サンプル値</p>
                 </td>
@@ -488,6 +493,11 @@ export function ComparisonTable({
                   <p className="mt-1 text-xs text-slate-500">
                     照合元: {getEvidenceSourceLabel(row)}
                   </p>
+                  {row.eligibilityReason && row.rowKind !== "base" ? (
+                    <p className="mt-2 max-w-52 text-xs leading-5 text-amber-800">
+                      {row.eligibilityReason}
+                    </p>
+                  ) : null}
                 </td>
                 <td className="px-3 py-3">
                   <Button

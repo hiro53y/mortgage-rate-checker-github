@@ -7,7 +7,12 @@ import {
   isBaseComparisonRow,
   selectBestRefinanceCandidate,
 } from "./lib/comparisonMath";
-import { fetchLatestRates, getCurrentMonthKey, isMonthlyAutoFetchDue } from "./lib/rateFetch";
+import {
+  applyFetchedRatesToRows,
+  fetchLatestRates,
+  getCurrentMonthKey,
+  isMonthlyAutoFetchDue,
+} from "./lib/rateFetch";
 import {
   createSampleAppStorage,
   ensureComparisonRowsIncludeBankSources,
@@ -53,24 +58,23 @@ export function getMomijiLowerRate(data: AppStorage): number {
 }
 
 function deriveAppDataFromCurrentLoan(data: AppStorage): AppStorage {
-  const scenarios = deriveScenariosFromLoan(
-    data.scenarios,
-    data.loanProfile,
-    getMomijiLowerRate(data),
-  );
+  const scenarios = deriveScenariosFromLoan(data.scenarios, data.loanProfile, getMomijiLowerRate(data));
   const comparisonRows = deriveComparisonRowsFromLoan(
     ensureComparisonRowsIncludeBankSources(data.comparisonRows, data.bankSources),
     data.loanProfile,
+    undefined,
+    data.bankSources,
   );
   const refinanceCandidate = selectBestRefinanceCandidate(
     comparisonRows,
     data.refinanceCostBreakdown,
     data.loanProfile,
+    undefined,
+    data.bankSources,
   );
   return {
     ...data,
     scenarios,
-    // v12: 星印（優先候補）と借換え画面の候補選定を一致させる（諸費用込みの選定を正とする）。
     comparisonRows: comparisonRows.map((row) => ({
       ...row,
       isPriorityCandidate: refinanceCandidate?.id === row.id,
@@ -80,6 +84,8 @@ function deriveAppDataFromCurrentLoan(data: AppStorage): AppStorage {
           refinanceCandidate,
           data.refinanceCostBreakdown,
           data.loanProfile,
+          undefined,
+          data.bankSources,
         )
       : null,
   };
@@ -100,7 +106,6 @@ export default function App() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isFetchingRates, setIsFetchingRates] = useState(false);
-  // v12: 同一セッション内で同じ月の自動取得を繰り返さない（無限ループ防止）。
   const autoFetchAttemptedMonthRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -210,58 +215,18 @@ export default function App() {
 
   const applyFetchedRates = useCallback(
     (responseRows: AppStorage["comparisonRows"], response: Awaited<ReturnType<typeof fetchLatestRates>>) => {
-      const fetchedRows = responseRows.map((row): BankComparisonRow => {
-        if (isBaseComparisonRow(row)) {
-          return row;
-        }
-        const source = appData.bankSources.find((bankSource) =>
-          row.bankName.includes(bankSource.bankName),
-        );
-        const item = response.items.find((rateItem) => rateItem.bankRateSourceId === source?.id);
-        if (!item) {
-          return row;
-        }
-        if (!item.offer) {
-          const lastGoodOffer = item.lastGoodOffer ?? row.lastGoodRateOffer;
-          return {
-            ...row,
-            rateOffer: lastGoodOffer ?? row.rateOffer,
-            lastGoodRateOffer: lastGoodOffer,
-            autoFetchedRate: lastGoodOffer?.advertisedMinRate,
-            advertisedMinRate: lastGoodOffer?.advertisedMinRate,
-            rateStatus:
-              row.manualOverrideRate !== undefined
-                ? "manual"
-                : lastGoodOffer
-                  ? "stale"
-                  : "failed",
-            lastFetchedAt: item.fetchedAt,
-            fetchError: item.message,
-          };
-        }
-        return {
-          ...row,
-          rateOffer: item.offer,
-          lastGoodRateOffer: item.status === "stale" ? row.lastGoodRateOffer : item.offer,
-          autoFetchedRate: item.offer.advertisedMinRate,
-          advertisedMinRate: item.offer.advertisedMinRate,
-          rateStatus:
-            row.manualOverrideRate !== undefined
-              ? "manual"
-              : item.status === "stale"
-                ? "stale"
-                : item.offer.sourceKind === "aggregator"
-                  ? "reference"
-                  : item.status === "needs-review"
-                    ? "reference"
-                    : "auto",
-          lastFetchedAt: item.fetchedAt,
-          fetchError:
-            item.status === "needs-review" || item.status === "stale" ? item.message : undefined,
-        };
-      });
+      const fetchedRows = applyFetchedRatesToRows(
+        responseRows,
+        appData.bankSources,
+        response,
+      );
 
-      return deriveComparisonRowsFromLoan(fetchedRows, appData.loanProfile);
+      return deriveComparisonRowsFromLoan(
+        fetchedRows,
+        appData.loanProfile,
+        undefined,
+        appData.bankSources,
+      );
     },
     [appData.bankSources, appData.loanProfile],
   );
@@ -276,7 +241,6 @@ export default function App() {
         if (!isMonthlyAutoFetchDue(appData.rateFetchState?.checkedMonth)) {
           return;
         }
-        // v12: サーバが前月キャッシュを返した場合等の同一セッション内の再取得ループを防ぐ。
         if (autoFetchAttemptedMonthRef.current === month) {
           return;
         }
@@ -287,12 +251,11 @@ export default function App() {
       const attemptAt = new Date().toISOString();
       try {
         const response = await fetchLatestRates(force);
-        const hasFetchedRate = response.items.some((item) => Boolean(item.offer));
+        const hasFreshFetchedRate =
+          response.cacheState !== "stale" &&
+          response.items.some((item) => Boolean(item.offer) && item.status !== "stale");
         const comparisonRows = applyFetchedRates(appData.comparisonRows, response);
-        // v12: もみじ銀行の新規向け下限金利は自動取得値があればそれを使う。
-        const momijiItem = response.items.find(
-          (item) => item.bankRateSourceId === "momiji",
-        );
+        const momijiItem = response.items.find((item) => item.bankRateSourceId === "momiji");
         const momijiOffer = momijiItem?.offer ?? momijiItem?.lastGoodOffer;
         const momijiLowerRate =
           momijiOffer?.advertisedMinRate !== undefined
@@ -308,9 +271,11 @@ export default function App() {
             comparisonRows,
             momijiLowerRate,
             rateFetchState: {
-              checkedMonth: response.month,
+              checkedMonth: hasFreshFetchedRate
+                ? month
+                : appData.rateFetchState?.checkedMonth,
               lastAttemptAt: attemptAt,
-              lastSuccessfulAt: hasFetchedRate
+              lastSuccessfulAt: hasFreshFetchedRate
                 ? response.fetchedAt
                 : appData.rateFetchState?.lastSuccessfulAt,
               source: "api",
@@ -324,7 +289,6 @@ export default function App() {
           {
             ...appData,
             rateFetchState: {
-              // v12: 失敗時は checkedMonth を進めない（次回起動時に自動再試行できるようにする）。
               checkedMonth: appData.rateFetchState?.checkedMonth,
               lastAttemptAt: attemptAt,
               lastSuccessfulAt: appData.rateFetchState?.lastSuccessfulAt,
@@ -390,7 +354,7 @@ export default function App() {
           message:
             manualRate !== null
               ? verification.confirmed
-                ? "公式ページ確認済みの手入力値で概算再判定しました。"
+                ? "公式URL・適用年月を確認済みの手入力値で概算再判定しました。"
                 : "未確認の手入力補正値で概算表示しました。借換え推薦には使用しません。"
               : "手入力補正を解除し、自動取得値またはサンプル値で概算再判定しました。",
         },

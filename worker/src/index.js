@@ -1,8 +1,14 @@
-import { getCachedRates, jsonResponse, refreshAllRates } from "../../functions/api/rateService.js";
+import {
+  getCachedRates,
+  jsonResponse,
+  makeAllItemsStale,
+  refreshAllRates,
+} from "../../functions/api/rateService.js";
 
-function isRefreshAuthorized(request, env) {
-  if (!env.REFRESH_TOKEN) return true;
-  return request.headers.get("x-refresh-token") === env.REFRESH_TOKEN;
+export function isRefreshAuthorized(request, env) {
+  const expectedToken = env.REFRESH_TOKEN;
+  if (typeof expectedToken !== "string" || expectedToken.length === 0) return false;
+  return request.headers.get("x-refresh-token") === expectedToken;
 }
 
 export default {
@@ -12,10 +18,21 @@ export default {
       return new Response("Not Found", { status: 404 });
     }
     if (request.method === "GET" && url.pathname === "/api/rates") {
-      const cached = await getCachedRates(env);
-      return cached
-        ? jsonResponse(cached)
-        : jsonResponse({ error: "金利キャッシュがまだありません。" }, 404);
+      const date = new Date();
+      const cached = await getCachedRates(env, { date });
+      if (!cached) return jsonResponse({ error: "金利キャッシュがまだありません。" }, 404);
+      if (cached.cacheState === "fresh") return jsonResponse(cached);
+      try {
+        return jsonResponse(await refreshAllRates(env, { date }));
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            message: "stale worker rate cache refresh failed",
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        return jsonResponse(makeAllItemsStale(cached));
+      }
     }
     if (request.method === "POST" && url.pathname === "/api/rates/refresh") {
       if (!isRefreshAuthorized(request, env)) {

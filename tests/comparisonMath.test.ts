@@ -249,7 +249,7 @@ describe("comparisonMath", () => {
       "2026-06-13",
     );
 
-    assert.equal(selectBestRefinanceCandidate(rows), null);
+    assert.equal(selectBestRefinanceCandidate(rows, undefined, undefined, "2026-06-13"), null);
     assert.equal(rows.some((candidateRow) => candidateRow.isPriorityCandidate), false);
   });
 
@@ -388,4 +388,3 @@ describe("comparisonMath", () => {
     assert.equal(rows.filter((candidateRow) => candidateRow.bankName.includes("もみじ")).length, 1);
   });
 });
-// v12: 日付固定（2026-06-13）で候補選定の回帰を防ぐ。

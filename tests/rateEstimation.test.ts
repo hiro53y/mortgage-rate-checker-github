@@ -248,16 +248,48 @@ test("v11: recalculateComparisonRow で 手入力+公式確認 → eligibility=e
     isPriorityCandidate: false,
     note: "test",
     manualOverrideRate: 0.55,
-    manualApplicableMonth: "2026-05",
+    manualApplicableMonth: "2026-06",
     manualSourceUrl: "https://www.chugin.co.jp/rate",
     manualVerifiedAt: "2026-06-21T00:00:00.000Z",
   };
-  const result = recalculateComparisonRow(candidateRow, loan());
+  const result = recalculateComparisonRow(
+    candidateRow,
+    loan(),
+    getLoanPaymentBasisStatus(loan(), "2026-06-21"),
+  );
   assert.equal(result.eligibility, "eligible");
   assert.equal(result.estimationTier, "official-condition-matched");
   assert.equal(result.estimationLabel, "公式確認済み手入力");
   assert.equal(result.sourceKind, "manual-verified");
   assert.equal(result.confidence, "verified");
+});
+
+test("v12: 前月の公式確認済み手入力は値を保持して参考・条件付きに降格する", () => {
+  const candidateRow: BankComparisonRow = {
+    id: "candidate-manual-stale",
+    rowKind: "candidate",
+    bankName: "中国銀行",
+    effectiveRate: 0.995,
+    insuranceLevel: "要確認",
+    monthlyPayment: 0,
+    netBenefit: 0,
+    isPriorityCandidate: false,
+    note: "test",
+    manualOverrideRate: 0.55,
+    manualApplicableMonth: "2026-05",
+    manualSourceUrl: "https://www.chugin.co.jp/personal/service/housingloan/rate/",
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+  };
+  const currentLoan = loan();
+  const result = recalculateComparisonRow(
+    candidateRow,
+    currentLoan,
+    getLoanPaymentBasisStatus(currentLoan, "2026-06-21"),
+  );
+  assert.equal(result.manualOverrideRate, 0.55);
+  assert.equal(result.eligibility, "conditional");
+  assert.equal(result.estimationLabel, "公式確認済み手入力（参考）");
+  assert.match(result.eligibilityReason ?? "", /当月/);
 });
 
 test("v11: recalculateComparisonRows で 手入力公式確認済み行が最低金利なら推薦に選ばれる", () => {
@@ -299,7 +331,11 @@ test("v11: recalculateComparisonRows で 手入力公式確認済み行が最低
     isPriorityCandidate: false,
     note: "test",
   };
-  const results = recalculateComparisonRows([baseRow, officialRow, manualRow], loan());
+  const results = recalculateComparisonRows(
+    [baseRow, officialRow, manualRow],
+    loan(),
+    getLoanPaymentBasisStatus(loan(), "2026-06-21"),
+  );
   const manualResult = results.find((r) => r.id === "manual-row");
   const officialResult = results.find((r) => r.id === "official-row");
   const baseResult = results.find((r) => r.id === "base-row");
@@ -333,12 +369,11 @@ test("v11: 手入力のみ（公式確認なし）は推薦に選ばれず、公
     note: "test",
     manualOverrideRate: 0.45,
   };
-  // v12: 基準日をfixtureの適用年月（2026-06）に固定する。
-  const fixedLoan = loan({ desiredInsuranceCoverage: "standard" });
+  const manualLoan = loan({ desiredInsuranceCoverage: "standard" });
   const results = recalculateComparisonRows(
     [officialRow, unverifiedManualRow],
-    fixedLoan,
-    getLoanPaymentBasisStatus(fixedLoan, "2026-06-21"),
+    manualLoan,
+    getLoanPaymentBasisStatus(manualLoan, "2026-06-21"),
   );
   const manualResult = results.find((r) => r.id === "manual-row-unverified");
   const officialResult = results.find((r) => r.id === "official-row");

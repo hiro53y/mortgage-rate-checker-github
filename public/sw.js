@@ -1,4 +1,4 @@
-const CACHE_NAME = "mortgage-rate-checker-v12-20260704";
+const CACHE_NAME = "mortgage-rate-checker-v12-20260811";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -41,7 +41,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // v12: APIはキャッシュせず、失敗時もHTMLではなくJSONエラーを返す。
+  // APIはキャッシュせず、失敗時もHTMLではなくJSONエラーを返す。
   if (requestUrl.pathname.startsWith("/api/")) {
     event.respondWith(
       fetch(event.request).catch(

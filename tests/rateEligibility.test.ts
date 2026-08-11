@@ -5,7 +5,8 @@ import {
   evaluateRateOfferForLoan,
 } from "../src/lib/rateEligibility.ts";
 import { isLatestFetchedCandidate } from "../src/lib/comparisonMath.ts";
-import type { BankComparisonRow, LoanProfile, RateOffer } from "../src/types.ts";
+import { getJstDateKey, getJstMonthKey } from "../src/lib/jstDate.ts";
+import type { BankComparisonRow, BankRateSource, LoanProfile, RateOffer } from "../src/types.ts";
 
 const baseOffer: RateOffer = {
   schemaVersion: 1,
@@ -91,7 +92,7 @@ function row(overrides: Partial<BankComparisonRow> = {}): BankComparisonRow {
   return {
     id: "candidate",
     rowKind: "candidate",
-    bankName: "候補銀行",
+    bankName: "住信SBIネット銀行",
     effectiveRate: 1,
     conditionMatchedRate: 1,
     rateOffer: baseOffer,
@@ -135,7 +136,7 @@ test("公式確認済み手入力だけを推薦候補にできる", () => {
     conditionMatchedRate: undefined,
     manualOverrideRate: 0.9,
     manualApplicableMonth: "2026-06",
-    manualSourceUrl: "https://bank.example/rate",
+    manualSourceUrl: "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
     manualVerifiedAt: "2026-06-21T00:00:00.000Z",
     sourceKind: "manual-verified",
   });
@@ -143,47 +144,65 @@ test("公式確認済み手入力だけを推薦候補にできる", () => {
   assert.equal(isLatestFetchedCandidate({ ...manual, manualVerifiedAt: undefined }, now), false);
 });
 
-// ===== v11: 手入力推薦の緩和ロジック =====
-test("v11: 手入力+公式確認+applicableMonth 当月 → 推薦対象", () => {
+// ===== v12: 手入力推薦の鮮度・公式ホスト確認 =====
+test("v12: 手入力+公式確認+JST当月+公式host → 推薦対象", () => {
   const now = new Date("2026-06-21T00:00:00+09:00");
   const manual = row({
     rateOffer: undefined,
     conditionMatchedRate: undefined,
     manualOverrideRate: 0.82,
     manualApplicableMonth: "2026-06",
-    manualSourceUrl: "https://bank.example/rate",
+    manualSourceUrl: "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
     manualVerifiedAt: "2026-06-21T00:00:00.000Z",
     sourceKind: "manual-verified",
   });
   assert.equal(isLatestFetchedCandidate(manual, now), true);
 });
 
-test("v11: 手入力+公式確認+applicableMonth 前月 → 推薦対象（緩和仕様）", () => {
+test("v12: 手入力+公式確認+前月 → 推薦対象外", () => {
   const now = new Date("2026-06-21T00:00:00+09:00");
   const manual = row({
     rateOffer: undefined,
     conditionMatchedRate: undefined,
     manualOverrideRate: 0.82,
     manualApplicableMonth: "2026-05",
-    manualSourceUrl: "https://bank.example/rate",
+    manualSourceUrl: "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
     manualVerifiedAt: "2026-06-21T00:00:00.000Z",
     sourceKind: "manual-verified",
   });
-  assert.equal(isLatestFetchedCandidate(manual, now), true);
+  assert.equal(isLatestFetchedCandidate(manual, now), false);
 });
 
-test("v11: 手入力+公式確認+applicableMonth 未入力 → 推薦対象", () => {
+test("v12: 手入力+公式確認+翌月または不正年月 → 推薦対象外", () => {
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  const manual = row({
+    rateOffer: undefined,
+    conditionMatchedRate: undefined,
+    manualOverrideRate: 0.82,
+    manualApplicableMonth: "2026-07",
+    manualSourceUrl: "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+    sourceKind: "manual-verified",
+  });
+  assert.equal(isLatestFetchedCandidate(manual, now), false);
+  assert.equal(
+    isLatestFetchedCandidate({ ...manual, manualApplicableMonth: "2026-13" }, now),
+    false,
+  );
+});
+
+test("v12: 手入力+公式確認+applicableMonth 未入力 → 推薦対象外", () => {
   const now = new Date("2026-06-21T00:00:00+09:00");
   const manual = row({
     rateOffer: undefined,
     conditionMatchedRate: undefined,
     manualOverrideRate: 0.82,
     manualApplicableMonth: undefined,
-    manualSourceUrl: "https://bank.example/rate",
+    manualSourceUrl: "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
     manualVerifiedAt: "2026-06-21T00:00:00.000Z",
     sourceKind: "manual-verified",
   });
-  assert.equal(isLatestFetchedCandidate(manual, now), true);
+  assert.equal(isLatestFetchedCandidate(manual, now), false);
 });
 
 test("v11: 手入力のみ（公式確認なし）→ 推薦対象外（参考表示のみ）", () => {
@@ -214,6 +233,97 @@ test("v11: 手入力+公式確認だが sourceUrl が http (非HTTPS) → 推薦
     eligibility: "unknown",
   });
   assert.equal(isLatestFetchedCandidate(manual, now), false);
+});
+
+test("v12: 手入力URLが対象銀行マスタの公式hostと異なる場合は推薦対象外", () => {
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  assert.equal(
+    isLatestFetchedCandidate(row({
+      rateOffer: undefined,
+      manualOverrideRate: 0.82,
+      manualApplicableMonth: "2026-06",
+      manualSourceUrl: "https://example.com/rate",
+      manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+      eligibility: "eligible",
+    }), now),
+    false,
+  );
+});
+
+test("v12: JST月境界で当月判定する", () => {
+  const manual = row({
+    rateOffer: undefined,
+    manualOverrideRate: 0.82,
+    manualApplicableMonth: "2026-07",
+    manualSourceUrl: "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
+    manualVerifiedAt: "2026-07-01T00:00:00.000Z",
+  });
+  assert.equal(isLatestFetchedCandidate(manual, new Date("2026-06-30T14:59:59.000Z")), false);
+  assert.equal(isLatestFetchedCandidate(manual, new Date("2026-06-30T15:00:00.000Z")), true);
+});
+
+test("v12: JST年月・日付helperは23:59:59と00:00:00の境界を共有する", () => {
+  const before = new Date("2026-06-30T14:59:59.000Z");
+  const after = new Date("2026-06-30T15:00:00.000Z");
+  assert.equal(getJstMonthKey(before), "2026-06");
+  assert.equal(getJstDateKey(before), "2026-06-30");
+  assert.equal(getJstMonthKey(after), "2026-07");
+  assert.equal(getJstDateKey(after), "2026-07-01");
+});
+
+test("v12: 公式確認日時が不正な手入力は推薦対象外", () => {
+  const manual = row({
+    rateOffer: undefined,
+    manualOverrideRate: 0.82,
+    manualApplicableMonth: "2026-06",
+    manualSourceUrl: "https://www.netbk.co.jp/contents/lp/homeloan/web/re.html",
+    manualVerifiedAt: "not-a-date",
+    eligibility: "eligible",
+  });
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  assert.equal(isLatestFetchedCandidate(manual, now), false);
+  assert.equal(
+    isLatestFetchedCandidate(
+      { ...manual, manualVerifiedAt: "2026-06-22T00:00:00.000Z" },
+      now,
+    ),
+    false,
+  );
+});
+
+test("v12: ユーザー登録銀行は登録済み公式hostと一致する手入力だけ推薦できる", () => {
+  const source: BankRateSource = {
+    id: "user-added-bank",
+    bankName: "ユーザー追加銀行",
+    productName: "住宅ローン",
+    rateUrl: "https://rates.user-bank.example/refinance",
+    insuranceUrl: "https://www.user-bank.example/insurance",
+    ratePurpose: "refinance-comparison",
+    compareType: "refinance-comparison",
+    targetRateType: "variable",
+    cancerInsuranceTarget: "要確認",
+    note: "ユーザー登録",
+  };
+  const manual = row({
+    bankName: source.bankName,
+    rateOffer: undefined,
+    manualOverrideRate: 0.82,
+    manualApplicableMonth: "2026-06",
+    manualSourceUrl: source.rateUrl,
+    manualVerifiedAt: "2026-06-21T00:00:00.000Z",
+    eligibility: "eligible",
+  });
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  assert.equal(isLatestFetchedCandidate(manual, now, [source]), true);
+  assert.equal(
+    isLatestFetchedCandidate({ ...manual, manualSourceUrl: "https://evil.example/rate" }, now, [source]),
+    false,
+  );
+});
+
+test("v12: stale API行は当月公式値でも推薦対象外", () => {
+  const now = new Date("2026-06-21T00:00:00+09:00");
+  assert.equal(isLatestFetchedCandidate(row({ rateStatus: "stale" }), now), false);
 });
 
 test("v11: 基準行（rowKind=base）に手入力しても推薦対象外", () => {

@@ -290,6 +290,8 @@ export type RateFetchResponse = {
   fetchedAt: string;
   items: RateFetchItem[];
   cached: boolean;
+  cacheState?: "fresh" | "stale";
+  staleReason?: "month-mismatch" | "invalid-fetched-at" | "future-fetched-at";
   locked?: boolean;
   message: string;
 };

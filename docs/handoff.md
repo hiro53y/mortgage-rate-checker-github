@@ -1,5 +1,47 @@
 # 引き継ぎメモ
 
+## 2026-08-11 v12 精度改善・第1段階
+
+### 完了したこと
+
+1. 推薦条件をJST当月へ厳格化
+   - 自動取得は当月・公式・`verified`・条件適合だけを推薦対象にした。
+   - 手入力は正の有限金利、有効な確認日時、JST当月、HTTPS、登録済み公式host一致を必須にした。
+   - 前月、未入力、不正年月、非HTTPS、host不一致、staleは値を残したまま `conditional` / 参考表示にし、★と借換え候補から除外した。
+2. JST判定を共通化
+   - `src/lib/jstDate.ts` にJST年月・日付helperを集約し、月境界、候補選定、入力初期値、返済基準日へ貫通させた。
+3. API/KVのstale・履歴処理をv12化
+   - `rates:latest` の月違い、不正日時、未来日時を区別し、通常GETでライブ再取得する。
+   - 再取得失敗時は旧証跡を保持したまま全行staleで返す。
+   - 旧証跡がない初回全失敗は `rates:latest` へ保存せず、次の通常GETでライブ再試行する。
+   - `rates:verified-latest:*` / `rates:verified-history:*` だけへ検証済み公式値を保存し、適格な旧KVだけを新キーへ移行する。
+4. 保存/UIの安全側修正
+   - 旧手入力の適用年月欠落は空欄を維持する。ユーザー追加銀行の登録URLも推薦時の公式host照合に使う。
+   - stale表示、デスクトップの具体的な条件理由、全角数値入力、もみじ下限値の有限・正数検証を反映した。
+5. 配布・運用ガード
+   - API `schemaVersion: 12`、画面 `2026/08/11 v12`、Service Worker `mortgage-rate-checker-v12-20260811`。
+   - 全ゼロ・形式不正・Production/Preview同一KV IDを拒否する事前検証と、ガード経由の `npm run worker:deploy` を追加した。
+   - 独立Cron Workerは `workers_dev: false` とし、手動refreshは `REFRESH_TOKEN` 未設定時も拒否するfail-closedにした。
+   - `deliverables/mortgage-rate-checker-github/` をルートと同期した。既存フォルダ名・過去成果物は変更していない。
+
+### 検証
+
+- ルートと公開用成果物の `npm test`（全102件）、`npx tsc -b`、`npm run build`
+- Worker/Functionsの `node --check`
+- `npm run worker:types`、`npm run worker:check`（Wrangler dry-run）
+- placeholder状態でdeploy guardが非0終了し、Wrangler deployへ進まないこと
+- ローカルUIで、前月手入力が参考表示、当月へ更新後に推薦復帰、stale行に★が付かないこと
+
+### 未実施・次段階
+
+- Cloudflare KV namespace作成、実ID設定、Pages Production/Preview binding、Worker/Cron/Pages本番デプロイは未実施。
+- 次段階は `docs/rate-worker.md` に従い、対象accountと別々のProduction/Preview KV IDを確認してから、必ず `npm run worker:deploy` の停止ガード経由で実施する。
+- 銀行別費用、純メリット順位、月次償還表、13銀行の公式アダプタ強化は今回の対象外。
+
+### 作業環境
+
+- 実装・検証: Codex
+
 
 
 ## 2026-07-04 v12 バグ修正まとめ（コードレビュー起点）
@@ -191,9 +233,9 @@ UI側では `stale`（前月値）と `failed`（取得失敗）の行を淡色�
 
 ## 次にやること
 
-1. Cloudflare ダッシュボードで KV namespace `RATE_CACHE` を作成し、ID を `worker/wrangler.jsonc` に貼り付ける
-2. Pages 側の Functions → KV bindings に `RATE_CACHE` を紐づける
-3. `npx wrangler deploy --config worker/wrangler.jsonc` で Cron Worker をデプロイする
+1. Cloudflare ダッシュボードでProduction/Preview別のKV namespace `RATE_CACHE` を作成し、別々のIDを `worker/wrangler.jsonc` に設定する
+2. Pages 側の Functions → KV bindings にProduction/Preview別の `RATE_CACHE` を紐づける
+3. `npm run worker:deploy` の停止ガード経由で Cron Worker をデプロイする
 4. 翌朝06:00 JST 以降に公開 `/api/rates` の `cached: true` と銀行別 status を確認する
 5. JS依存銀行が残るなら、Workers Paid を有効化した上で `BROWSER` binding を追加する
 
@@ -576,4 +618,4 @@ UI側では `stale`（前月値）と `failed`（取得失敗）の行を淡色�
 
 - Codex実行ポリシーにより、Vite dev serverのバックグラウンド常駐起動はブロックされた
 - 添付画像は指定パスで読めなかったため、プロンプト本文のUI指定を優先した
-- Cloudflare KV `RATE_CACHE` は任意。未設定で�
+- Cloudflare KV `RATE_CACHE` は任意。未設定でもライブ取得で動作する。

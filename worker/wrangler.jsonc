@@ -2,6 +2,7 @@
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "mortgage-rate-checker-rates",
   "main": "src/index.js",
+  "workers_dev": false,
   "compatibility_date": "2026-06-23",
   "compatibility_flags": ["nodejs_compat"],
   "triggers": {
@@ -17,6 +18,8 @@
   "kv_namespaces": [
     {
       "binding": "RATE_CACHE",
+      // v12停止弁: `npm run worker:deploy` は全ゼロ、形式不正、Production/Preview同一IDを拒否する。
+      // 実IDを設定し、Pages側にもProduction/Preview別の同名bindingを設定するまで本番デプロイしない。
       "id": "00000000000000000000000000000000",
       "preview_id": "00000000000000000000000000000000"
     }

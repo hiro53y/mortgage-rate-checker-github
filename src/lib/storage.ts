@@ -100,13 +100,16 @@ export function validateAppStorage(value: unknown): AppStorage | null {
     expectedVariableRateRange: source.expectedVariableRateRange,
     maxMonthlyDelta: source.maxMonthlyDelta,
   }));
-  // v12: ユーザーが設定画面で追加した銀行（サンプル外ID）も保持する。
+  // 公開用v12で追加済みの、サンプル外のユーザー追加銀行も保持する。
   const userAddedSources = savedSources.filter(
     (saved) => !sample.bankSources.some((source) => source.id === saved.id),
   );
   const allSources = [...mergedSources, ...userAddedSources];
   const momijiLowerRate =
-    isObject(value.momijiLowerRate) && typeof value.momijiLowerRate.rate === "number"
+    isObject(value.momijiLowerRate) &&
+    typeof value.momijiLowerRate.rate === "number" &&
+    Number.isFinite(value.momijiLowerRate.rate) &&
+    value.momijiLowerRate.rate > 0
       ? {
           rate: value.momijiLowerRate.rate,
           applicableMonth:

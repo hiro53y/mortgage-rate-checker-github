@@ -73,12 +73,8 @@ function addMonthsToIsoDate(parts: IsoDateParts, monthsToAdd: number): string {
   return formatIsoDateParts({ year, month, day });
 }
 
-export function getLocalTodayIsoDate(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+export function getLocalTodayIsoDate(date = new Date()): string {
+  return getJstDateKey(date);
 }
 
 export function getEffectiveNextPaymentDate(
@@ -140,3 +136,4 @@ export function calculateRemainingBonusPayments(
   }
   return count;
 }
+import { getJstDateKey } from "./jstDate.ts";

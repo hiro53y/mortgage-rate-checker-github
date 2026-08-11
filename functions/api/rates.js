@@ -1,4 +1,4 @@
-import { getCachedRates, jsonResponse, refreshAllRates } from "./rateService.js";
+import { getCachedRates, jsonResponse, makeAllItemsStale, refreshAllRates } from "./rateService.js";
 import {
   extractRate as extractRateV7,
   extractRateFromAggregate as extractRateFromAggregateV7,
@@ -742,11 +742,26 @@ export {
 
 export async function onRequestGet(context) {
   try {
-    const cached = await getCachedRates(context.env);
-    if (cached) return jsonResponse(cached);
+    const date = new Date();
+    const cached = await getCachedRates(context.env, { date });
+    if (cached?.cacheState === "fresh") return jsonResponse(cached);
+    if (cached?.cacheState === "stale") {
+      try {
+        return jsonResponse(await refreshAllRates(context.env, { date }));
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            message: "stale rate cache refresh failed",
+            month: getJstMonthKey(date),
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        return jsonResponse(makeAllItemsStale(cached));
+      }
+    }
     return jsonResponse(
       await refreshAllRates(context.env, {
-        date: new Date(),
+        date,
         bypassLock: !context.env?.RATE_CACHE,
       }),
     );

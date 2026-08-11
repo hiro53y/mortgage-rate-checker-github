@@ -10,6 +10,7 @@ import {
   getEffectiveNextPaymentDate,
   getLocalTodayIsoDate,
 } from "./mortgageMath.ts";
+import { getJstMonthKey } from "./jstDate.ts";
 
 export type RateEligibilityResult = {
   eligibility: RateEligibility;
@@ -148,6 +149,5 @@ export function evaluateRateOfferForLoan(
 
 export function isOfferCurrentMonth(offer: RateOffer | undefined, date = new Date()) {
   if (!offer) return false;
-  const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-  return offer.applicableMonth === month;
+  return offer.applicableMonth === getJstMonthKey(date);
 }

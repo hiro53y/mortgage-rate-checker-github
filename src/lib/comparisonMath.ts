@@ -22,6 +22,7 @@ import {
 } from "./refinanceMath.ts";
 import { evaluateRateOfferForLoan, isOfferCurrentMonth } from "./rateEligibility.ts";
 import { bankRateSources } from "./bankSources.ts";
+import { getJstDateKey, getJstMonthKey, isValidMonthKey } from "./jstDate.ts";
 
 /**
  * 団信込み（がん100%相当）に揃えるための想定上乗せ幅。
@@ -100,31 +101,38 @@ export function getEstimatedRate(
   };
 }
 
-function findBankSource(row: BankComparisonRow): BankRateSource | undefined {
+function findBankSource(
+  row: BankComparisonRow,
+  sources: BankRateSource[] = bankRateSources,
+): BankRateSource | undefined {
   if (row.rateOffer?.bankRateSourceId) {
-    const matched = bankRateSources.find(
+    const matched = sources.find(
       (source) => source.id === row.rateOffer?.bankRateSourceId,
     );
     if (matched) return matched;
   }
-  return bankRateSources.find((source) => row.bankName.includes(source.bankName));
+  return sources.find((source) => row.bankName.includes(source.bankName));
 }
 
 const BENEFIT_DISPLAY_MONTHS = 144;
 const PAYMENT_STALENESS_THRESHOLD_YEN = 1000;
 
 export function getRateUsedForCalculation(row: BankComparisonRow): number {
-  return (
-    row.manualOverrideRate ??
-    row.conditionMatchedRate ??
-    row.autoFetchedRate ??
-    row.effectiveRate
-  );
+  if (Number.isFinite(row.manualOverrideRate) && (row.manualOverrideRate ?? 0) > 0) {
+    return row.manualOverrideRate as number;
+  }
+  for (const rate of [row.conditionMatchedRate, row.autoFetchedRate, row.effectiveRate]) {
+    if (Number.isFinite(rate) && (rate ?? -1) >= 0) return rate as number;
+  }
+  throw new Error("比較計算に使用できる金利がありません。");
 }
 
 export function getRateStatus(row: BankComparisonRow): NonNullable<BankComparisonRow["rateStatus"]> {
   if (row.manualOverrideRate !== undefined) {
     return "manual";
+  }
+  if (row.rateStatus === "stale" || row.rateStatus === "failed") {
+    return row.rateStatus;
   }
   if (row.autoFetchedRate !== undefined) {
     return row.rateOffer?.sourceKind === "aggregator" ? "reference" : "auto";
@@ -132,17 +140,75 @@ export function getRateStatus(row: BankComparisonRow): NonNullable<BankCompariso
   return row.rateStatus ?? "sample";
 }
 
-export function isLatestFetchedCandidate(row: BankComparisonRow, date = new Date()): boolean {
-  if (isBaseComparisonRow(row) || row.eligibility !== "eligible") return false;
-  // v11: 手入力 + 公式確認済みの場合は推薦対象とする。
-  // - applicableMonth は当月厳格チェックを廃止（前月の値でも公式確認済みなら採用）
-  // - sourceUrl の HTTPS 要件は維持（証跡として最低限必要）
-  // - 「手入力のみ（公式確認なし）」は manualVerifiedAt が空のため不採用。
-  const verifiedManual =
+function getManualVerificationIssue(
+  row: BankComparisonRow,
+  date = new Date(),
+  sources: BankRateSource[] = bankRateSources,
+): string | undefined {
+  if (!Number.isFinite(row.manualOverrideRate) || (row.manualOverrideRate ?? 0) <= 0) {
+    return "手入力金利が正の数値ではないため参考表示です。";
+  }
+  const verifiedAt = row.manualVerifiedAt;
+  const isoInstantMatch = verifiedAt?.match(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/,
+  );
+  const verifiedAtMs = verifiedAt ? Date.parse(verifiedAt) : Number.NaN;
+  const normalizedVerifiedAt = verifiedAt?.includes(".")
+    ? verifiedAt
+    : verifiedAt?.replace("Z", ".000Z");
+  if (
+    !verifiedAt ||
+    !isoInstantMatch ||
+    !Number.isFinite(verifiedAtMs) ||
+    new Date(verifiedAtMs).toISOString() !== normalizedVerifiedAt
+  ) {
+    return "公式確認日時が未登録または形式不正のため参考表示です。";
+  }
+  const referenceDayEndMs = Date.parse(`${getJstDateKey(date)}T23:59:59.999+09:00`);
+  if (verifiedAtMs > referenceDayEndMs) {
+    return "公式確認日時が未来日のため参考表示です。";
+  }
+  if (!row.manualSourceUrl?.startsWith("https://")) {
+    return "公式URLがHTTPSではないため参考表示です。";
+  }
+  const source = findBankSource(row, sources);
+  if (!source) return "対象銀行マスタが見つからないため参考表示です。";
+  let manualHost: string;
+  let officialHost: string;
+  try {
+    manualHost = new URL(row.manualSourceUrl).hostname;
+    officialHost = new URL(source.rateUrl).hostname;
+  } catch {
+    return "公式URLの形式が不正なため参考表示です。";
+  }
+  if (manualHost !== officialHost) {
+    return "入力したURLが対象銀行マスタの公式サイトと一致しないため参考表示です。";
+  }
+  if (!isValidMonthKey(row.manualApplicableMonth)) {
+    return `適用年月が未入力または形式不正のため参考表示です。当月（${getJstMonthKey(date)}）を入力してください。`;
+  }
+  if (row.manualApplicableMonth !== getJstMonthKey(date)) {
+    return `適用年月（${row.manualApplicableMonth}）が当月（${getJstMonthKey(date)}）ではないため参考表示です。`;
+  }
+  return undefined;
+}
+
+function hasOfficialManualEvidence(row: BankComparisonRow): boolean {
+  return (
     row.manualOverrideRate !== undefined &&
     Boolean(row.manualVerifiedAt) &&
-    Boolean(row.manualSourceUrl?.startsWith("https://"));
-  if (verifiedManual) return true;
+    Boolean(row.manualSourceUrl)
+  );
+}
+
+export function isLatestFetchedCandidate(
+  row: BankComparisonRow,
+  date = new Date(),
+  sources: BankRateSource[] = bankRateSources,
+): boolean {
+  if (isBaseComparisonRow(row) || row.eligibility !== "eligible") return false;
+  if (row.rateStatus === "stale") return false;
+  if (row.manualOverrideRate !== undefined) return !getManualVerificationIssue(row, date, sources);
   // 推定値（第3・4優先）は推薦対象外。
   // v10: 第1優先（公式条件適合）のみが自動推薦の対象。
   if (
@@ -160,7 +226,6 @@ export function isLatestFetchedCandidate(row: BankComparisonRow, date = new Date
 }
 
 export function isBaseComparisonRow(row: BankComparisonRow): boolean {
-  // v12: rowKind が明示されている行はそれを正とする（文字列一致の誤判定防止）。
   if (row.rowKind !== undefined) {
     return row.rowKind === "base";
   }
@@ -175,6 +240,7 @@ export function recalculateComparisonRow(
   row: BankComparisonRow,
   loan: LoanProfile,
   paymentBasis = getLoanPaymentBasisStatus(loan),
+  sources: BankRateSource[] = bankRateSources,
 ): BankComparisonRow {
   const remainingMonths = Math.max(paymentBasis.remainingMonths, 1);
   const remainingBonusPayments = paymentBasis.remainingBonusPayments;
@@ -215,19 +281,23 @@ export function recalculateComparisonRow(
   const offerEvaluation = row.rateOffer
     ? evaluateRateOfferForLoan(row.rateOffer, loan, paymentBasis.todayIsoDate)
     : null;
-  // v11: hasVerifiedManual は「手入力値 + 公式確認チェック + sourceUrl」で成立する。
-  //      applicableMonth は任意（あれば表示に使う、なくても推薦対象から外さない）。
-  const hasVerifiedManual =
-    row.manualOverrideRate !== undefined &&
-    Boolean(row.manualVerifiedAt) &&
-    Boolean(row.manualSourceUrl);
+  const hasManualInput = row.manualOverrideRate !== undefined;
+  const hasVerifiedManual = hasOfficialManualEvidence(row);
+  const manualVerificationIssue = hasManualInput
+    ? getManualVerificationIssue(
+        row,
+        new Date(`${paymentBasis.todayIsoDate}T00:00:00+09:00`),
+        sources,
+      )
+    : undefined;
+  const isCurrentVerifiedManual = hasVerifiedManual && !manualVerificationIssue;
 
   // 3層フォールバックで「条件適合金利」を必ず確定する。
   // 第1: offerEvaluation?.conditionMatchedRate
   // 第2: aggregator由来の参考値
   // 第3: 広告下限 + 0.3% 一律団信上乗せ
   // 第4: 銀行のexpectedVariableRateRange中央値
-  const bankSource = findBankSource(row);
+  const bankSource = findBankSource(row, sources);
   const estimation = getEstimatedRate(
     row,
     bankSource,
@@ -252,14 +322,22 @@ export function recalculateComparisonRow(
     // v11: 手入力+公式確認済みのときは推薦対象に並ぶため、
     //      tier は「公式条件適合」相当として扱い、ラベルも手入力であることを明示する。
     estimationTier: hasVerifiedManual ? "official-condition-matched" : estimation.tier,
-    estimationLabel: hasVerifiedManual ? "公式確認済み手入力" : estimation.label,
+    estimationLabel: hasVerifiedManual
+      ? isCurrentVerifiedManual
+        ? "公式確認済み手入力"
+        : "公式確認済み手入力（参考）"
+      : estimation.label,
     sourceKind: hasVerifiedManual ? "manual-verified" : row.rateOffer?.sourceKind,
     confidence: hasVerifiedManual ? "verified" : row.rateOffer?.confidence,
-    eligibility: hasVerifiedManual ? "eligible" : (offerEvaluation?.eligibility ?? "unknown"),
-    eligibilityReason: hasVerifiedManual
-      ? row.manualApplicableMonth
-        ? `公式ページ確認済みとして登録した手入力値（適用年月 ${row.manualApplicableMonth}）`
-        : "公式ページ確認済みとして登録した手入力値"
+    eligibility: hasManualInput
+      ? isCurrentVerifiedManual
+        ? "eligible"
+        : "conditional"
+      : (offerEvaluation?.eligibility ?? "unknown"),
+    eligibilityReason: hasManualInput
+      ? isCurrentVerifiedManual
+        ? `公式URL・確認日・適用年月（${row.manualApplicableMonth}）を登録した手入力値`
+        : `${hasVerifiedManual ? "公式確認済み手入力ですが、" : "手入力値は"}${manualVerificationIssue}`
       : (offerEvaluation?.reason ?? "取得条件がありません。"),
     applicableMonth: hasVerifiedManual
       ? (row.manualApplicableMonth ?? row.rateOffer?.applicableMonth)
@@ -305,13 +383,17 @@ export function recalculateComparisonRows(
   rows: BankComparisonRow[],
   loan: LoanProfile,
   paymentBasis = getLoanPaymentBasisStatus(loan),
+  sources: BankRateSource[] = bankRateSources,
 ): BankComparisonRow[] {
-  const recalculatedRows = rows.map((row) => recalculateComparisonRow(row, loan, paymentBasis));
+  const recalculatedRows = rows.map((row) =>
+    recalculateComparisonRow(row, loan, paymentBasis, sources),
+  );
   const lowestFetchedCandidate = selectBestRefinanceCandidate(
     recalculatedRows,
     undefined,
     undefined,
     paymentBasis.todayIsoDate,
+    sources,
   );
   return recalculatedRows.map((row) => ({
     ...row,
@@ -344,13 +426,19 @@ export function deriveComparisonRowsFromLoan(
   rows: BankComparisonRow[],
   loan: LoanProfile,
   todayIsoDate?: string,
+  sources: BankRateSource[] = bankRateSources,
 ): BankComparisonRow[] {
-  return recalculateComparisonRows(rows, loan, getLoanPaymentBasisStatus(loan, todayIsoDate));
+  return recalculateComparisonRows(
+    rows,
+    loan,
+    getLoanPaymentBasisStatus(loan, todayIsoDate),
+    sources,
+  );
 }
 
 function toReferenceDate(todayIsoDate?: string): Date {
   if (todayIsoDate && /^\d{4}-\d{2}-\d{2}$/.test(todayIsoDate)) {
-    return new Date(`${todayIsoDate}T00:00:00`);
+    return new Date(`${todayIsoDate}T00:00:00+09:00`);
   }
   return new Date();
 }
@@ -360,10 +448,12 @@ export function selectBestRefinanceCandidate(
   refinanceCosts?: RefinanceCostBreakdown,
   loan?: LoanProfile,
   todayIsoDate?: string,
+  sources: BankRateSource[] = bankRateSources,
 ): BankComparisonRow | null {
-  // v12: 基準日を当月判定まで貫通させる（テスト・再計算の日付一貫性）。
   const referenceDate = toReferenceDate(todayIsoDate);
-  const candidates = rows.filter((row) => isLatestFetchedCandidate(row, referenceDate));
+  const candidates = rows.filter((row) =>
+    isLatestFetchedCandidate(row, referenceDate, sources),
+  );
   if (candidates.length === 0) {
     return null;
   }
@@ -386,6 +476,7 @@ export function selectBestRefinanceCandidate(
             refinanceCosts,
             loan,
             todayIsoDate,
+            sources,
           ).netBenefit,
         }))
         .sort((a, b) => {
@@ -404,9 +495,10 @@ export function selectBestRefinanceCandidate(
 function getCandidateReviewWarning(
   row: BankComparisonRow,
   referenceDate = new Date(),
+  sources: BankRateSource[] = bankRateSources,
 ): string | undefined {
   const warnings: string[] = [];
-  if (!isLatestFetchedCandidate(row, referenceDate)) {
+  if (!isLatestFetchedCandidate(row, referenceDate, sources)) {
     warnings.push("最新金利を自動取得できていない候補");
   }
   if (row.sourceKind === "manual-verified" && !row.manualVerifiedAt) warnings.push("手入力の公式確認が未完了");
@@ -428,6 +520,7 @@ export function buildRefinanceResultFromCurrentLoan(
   refinanceCosts: RefinanceCostBreakdown,
   loan: LoanProfile,
   todayIsoDate?: string,
+  sources: BankRateSource[] = bankRateSources,
 ): RefinanceResult {
   const paymentBasis = getLoanPaymentBasisStatus(loan, todayIsoDate);
   const remainingMonths = Math.max(paymentBasis.remainingMonths, 1);
@@ -458,7 +551,11 @@ export function buildRefinanceResultFromCurrentLoan(
   );
   const averageMonthlyDifference = (monthlyDifference * 12 + bonusDifference * 2) / 12;
   const paybackMonths = calculatePaybackMonths(totalCosts, averageMonthlyDifference);
-  const candidateReviewWarning = getCandidateReviewWarning(row, toReferenceDate(todayIsoDate));
+  const candidateReviewWarning = getCandidateReviewWarning(
+    row,
+    toReferenceDate(todayIsoDate),
+    sources,
+  );
 
   return {
     bankRateId: row.id,

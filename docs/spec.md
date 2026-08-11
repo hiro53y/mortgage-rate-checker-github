@@ -2,6 +2,18 @@
 
 > 以下のv1記載は初期仕様の履歴です。外部取得、Cloudflare Functions/Worker、Cronの範囲は2026年06月21日以降のv7/v8仕様で置き換えられています。
 
+## 2026年08月11日 v12 精度改善仕様
+
+- 年月・日付判定は `Asia/Tokyo` に統一し、JST当月だけを推薦鮮度の基準にする。24時間・30時間などの時間TTLは導入しない。
+- 自動推薦は、JST当月、公式由来、`verified`、利用者条件適合の自動取得値に限定する。stale、aggregator、review、推定値は表示のみとする。
+- 公式確認済み手入力は、正の有限金利、有効な確認日時、JST当月の適用年月、HTTPS、対象銀行の登録済み公式host一致をすべて満たす場合だけ推薦できる。
+- 条件を満たさない保存済み手入力は削除せず、`conditional` と具体的な理由、「公式確認済み手入力（参考）」を表示して計算用参考値として保持する。
+- 旧保存データに適用年月がなければ入力欄を空欄で表示し、当月へ自動補完しない。新規入力だけJST当月を初期値にする。
+- `rates:latest` はJST当月かつ取得日時が有効で未来でない場合だけfreshとする。stale時は通常GETでもライブ再取得し、失敗時は旧証跡を保った全行stale応答へ戻す。
+- 銀行別の正常値は `rates:verified-latest:{bankId}` と `rates:verified-history:{YYYY-MM}:{bankId}` に保存する。当月・公式・`verified`・正の有限金利・正常日時を満たす値だけを書き込み、適格な旧KVだけを新キーへ移行する。
+- `RateFetchResponse` の `cacheState` は `fresh | stale`、`staleReason` は `month-mismatch | invalid-fetched-at | future-fetched-at` とする。
+- API `schemaVersion` は12。Cloudflare本番KV作成、実ID設定、Pages binding、Worker/Pagesデプロイは第1段階の対象外とする。
+
 ## 前提
 
 - 時点: 2026年05月06日

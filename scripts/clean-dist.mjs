@@ -1,6 +1,12 @@
 import { rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
+const workspaceRoot = resolve(".");
 for (const target of ["dist", "node_modules/.vite"]) {
-  rmSync(resolve(target), { recursive: true, force: true });
+  const resolvedTarget = resolve(target);
+  const relativeTarget = relative(workspaceRoot, resolvedTarget);
+  if (relativeTarget.startsWith("..") || isAbsolute(relativeTarget)) {
+    throw new Error(`Refusing to remove a path outside the workspace: ${resolvedTarget}`);
+  }
+  rmSync(resolvedTarget, { recursive: true, force: true });
 }

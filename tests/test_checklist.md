@@ -1,5 +1,43 @@
 # テストチェックリスト
 
+## 2026-08-11 v12 精度改善・第1段階
+
+### 自動テスト
+
+- [x] JST 2026-06-30 23:59:59 / 2026-07-01 00:00:00 の年月・日付境界
+- [x] 手入力の当月、前月、翌月、未入力、不正年月、HTTP、非公式host、不正・未来確認日時、基準行
+- [x] ユーザー登録銀行の登録済み公式host一致/不一致
+- [x] stale自動取得行の推薦除外
+- [x] 当月cache、月跨ぎ、不正日時、未来日時、ライブ再取得、失敗時staleフォールバック
+- [x] 初回全銀行失敗は `rates:latest` へ保存せず、次の通常GETで再取得
+- [x] verified履歴だけの保存・復元と、aggregator/review/月違い/未来日時の移行除外
+- [x] 旧verified KVの `rates:verified-latest` / `rates:verified-history` への移行
+- [x] 旧保存データのユーザー追加銀行・もみじ下限値復元と不正値除外
+- [x] ルート `npm test`（全102件）
+- [x] ルート `npx tsc -b`
+- [x] ルート `npm run build`
+- [x] Worker/Functions `node --check`
+- [x] `npm run worker:types`
+- [x] `npm run worker:check`（本番変更なしのdry-run）
+- [x] placeholder状態のdeploy guardが非0終了し、Wrangler deployへ進まない
+- [x] 独立Cron Workerは `workers_dev: false`、手動refreshはtoken未設定・不一致を拒否
+- [x] 公開用成果物の同期一致確認
+- [x] 公開用成果物 `npm test` / `npx tsc -b` / `npm run build` / Worker検証
+
+### 手動UIチェック
+
+- [x] 前月の公式確認済み手入力が「公式確認済み手入力（参考）」・条件付きになり、★が付かない
+- [x] 同じ値の適用年月をJST当月へ更新して再判定すると推薦へ復帰する
+- [x] stale行に★が付かず、保存値（参考）と具体的な警告が表示される
+- [x] 旧保存データで適用年月がない手入力欄が空欄のまま表示される
+- [x] モバイル/デスクトップの両方に当月・公式host条件と降格理由が表示される
+
+### 本番境界
+
+- [x] Cloudflare KV作成、実ID設定、Pages binding、Worker/Pages本番デプロイを実施していない
+
+> このv12節が現行仕様です。下記v11の「前月・未入力でも推薦」は履歴であり、v12では撤回されています。
+
 ## 2026-06-26 v10
 
 - [x] 第1優先：公式条件適合金利が `getEstimatedRate` から `official-condition-matched` で返る

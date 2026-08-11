@@ -7,9 +7,10 @@
     "dev": "vite --host 0.0.0.0",
     "build": "node scripts/clean-dist.mjs && tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node tests/mortgageMath.test.ts && node tests/scenarioMath.test.ts && node tests/refinanceMath.test.ts && node tests/comparisonMath.test.ts && node tests/rateExtraction.test.ts && node tests/rateAdapters.test.ts && node tests/rateEligibility.test.ts && node tests/rateEstimation.test.ts && node tests/rateService.test.ts && node tests/storageMigration.test.ts",
+    "test": "node tests/mortgageMath.test.ts && node tests/scenarioMath.test.ts && node tests/refinanceMath.test.ts && node tests/comparisonMath.test.ts && node tests/rateExtraction.test.ts && node tests/rateAdapters.test.ts && node tests/rateEligibility.test.ts && node tests/rateEstimation.test.ts && node tests/rateFetch.test.ts && node tests/rateService.test.ts && node tests/workerAuth.test.ts && node tests/storageMigration.test.ts",
     "worker:types": "wrangler types --config worker/wrangler.jsonc worker/worker-configuration.d.ts",
-    "worker:check": "wrangler deploy --dry-run --config worker/wrangler.jsonc"
+    "worker:check": "wrangler deploy --dry-run --config worker/wrangler.jsonc",
+    "worker:deploy": "node scripts/validate-worker-config.mjs && wrangler deploy --config worker/wrangler.jsonc"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.1",
